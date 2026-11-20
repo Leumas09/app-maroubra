@@ -25,3 +25,4 @@ Commandes : `npm test` (tous les tests), `apps/hub/scripts/demo.sh start` (hubs 
 - Tag `project=maroubra` sur chaque ressource, dans `rg-app-maroubra`. Ne jamais modifier le socle `rg-kiwi-apps`.
 - Chaque prévision affichée a un juge extérieur (observation, référence indépendante) ; un objectif manqué reste visible dans le Track record.
 - Interface en anglais ; documentation et code commentés en français, sans tiret cadratin.
+- Pull requests : en ouvrir une en autonomie dès qu'un lot de travail est terminé, testé et poussé, sans attendre que Samuel la demande. La fusion reste à Samuel.
