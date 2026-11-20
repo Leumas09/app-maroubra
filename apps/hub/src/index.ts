@@ -1,5 +1,5 @@
 import { serve } from "@hono/node-server";
-import type { Beach, Buoy, Fires, Flights, Iss, Marine, Moment, SpaceWeather, Sunrise, Weather } from "@maroubra/core";
+import type { Beach, BeachStatus, Buoy, Fires, Flights, Iss, Marine, Moment, SpaceWeather, Sunrise, Weather } from "@maroubra/core";
 import { archiveHour } from "./archive";
 import { startCollectors, type Collector } from "./collector";
 import { loadConfig } from "./config";
@@ -15,6 +15,7 @@ import { flightsCollector } from "./sources/flights";
 import { air, fires, space } from "./sources/hazards";
 import { issCollector } from "./sources/iss";
 import { newsCollector } from "./sources/news";
+import { beachStatus } from "./sources/beach-status";
 import { buoy, marine } from "./sources/sea";
 import { metar, weather } from "./sources/weather";
 import { Store } from "./store";
@@ -41,7 +42,7 @@ const derived: Collector[] = [
     run: async ({ store: s, now }) => {
       const w = s.data<Weather>("weather");
       if (!w) throw new Error("waiting for weather");
-      return beach(w, s.data<Marine>("marine"), s.data<Buoy>("buoy"), tide, now.getTime());
+      return beach(w, s.data<Marine>("marine"), s.data<Buoy>("buoy"), tide, now.getTime(), s.data<BeachStatus>("beachStatus"));
     },
   },
   {
@@ -65,7 +66,7 @@ const derived: Collector[] = [
 ];
 
 const collectors: Collector[] = [
-  weather, metar, marine, buoy, flightsCollector(), fires, air, space, issCollector(), sunrise, newsCollector(llm), ...derived,
+  weather, metar, marine, buoy, beachStatus, flightsCollector(), fires, air, space, issCollector(), sunrise, newsCollector(llm), ...derived,
 ];
 startCollectors(store, collectors, { offline: cfg.offline });
 

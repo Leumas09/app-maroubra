@@ -30,7 +30,7 @@ export function createApp(cfg: Config, store: Store, deps: { push?: Push } = {})
     if (cfg.secureCookies) c.header("Strict-Transport-Security", "max-age=31536000");
     c.header(
       "Content-Security-Policy",
-      "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; " +
+      "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://www.randwick.nsw.gov.au; " +
         "font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
     );
   });

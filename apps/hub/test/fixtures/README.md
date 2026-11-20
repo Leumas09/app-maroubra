@@ -3,6 +3,7 @@
 | Fichier | Origine | Licence |
 |---|---|---|
 | `rfs-majorincidents-2020-10-10.json` | Flux réel `majorIncidents.json` du NSW RFS du 10/10/2020, tel que conservé dans les tests du paquet npm `@beyondtracks/nsw-rfs-majorincidents-geojson` | © State of New South Wales (NSW Rural Fire Service), CC BY 4.0 |
+| `randwick-lifeguards-2026-11-09.xml` | Flux RSS des rapports de sauveteurs de Randwick City Council : l'item Maroubra est la capture réelle du 09/11/2026 conservée dans les tests du projet public `lukewjudd/beach-bot` ; l'item Clovelly de la veille est construit sur le même modèle | © Randwick City Council |
 
 Les autres données de test sont construites à la main dans les tests eux-mêmes, au format documenté par chaque source
 (code source d'adsb.lol pour les avions, API Open-Meteo, produits NOAA SWPC), et signalées comme telles.

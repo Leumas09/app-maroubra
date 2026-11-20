@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { AirQuality, Beach as BeachData, Brief, Buoy, Fires, Flights, Iss, Marine, Metar, Moment, News as NewsData, SpaceWeather, Sunrise, Weather as WeatherData } from "@maroubra/core";
+import type { AirQuality, Beach as BeachData, BeachStatus, Brief, Buoy, Fires, Flights, Iss, Marine, Metar, Moment, News as NewsData, SpaceWeather, Sunrise, Weather as WeatherData } from "@maroubra/core";
 import { data, entry, isDemo, useLive } from "./lib/live";
 import type { SkyModel } from "./lib/sky-model";
 import { loadTide, type TideTable } from "./lib/tide";
@@ -94,6 +94,7 @@ export function App() {
 
   const weather = entry<WeatherData>(snap, "weather");
   const beach = entry<BeachData>(snap, "beach");
+  const beachStatus = entry<BeachStatus>(snap, "beachStatus");
   const flights = entry<Flights>(snap, "flights");
   const fires = entry<Fires>(snap, "fires");
   const air = entry<AirQuality>(snap, "air");
@@ -122,7 +123,7 @@ export function App() {
         <nav className="rail-main" aria-label="Views">
           {link("home", night ? "Tonight" : "Today")}
           {link("weather", "Weather")}
-          {link("beach", "Beach")}
+          {link("beach", "Beach", beachStatus?.data?.status === "closed" ? { alert: "closed today" } : {})}
           {link("sea", "Sea")}
           {link("sky", "Sky")}
           {link("overhead", "Overhead")}
@@ -143,7 +144,7 @@ export function App() {
         </div>
         {current === "home" && <Home now={now} sky={sky} brief={brief?.text ?? null} beach={beach} weather={weather} buoy={buoy} marine={entry<Marine>(snap, "marine")} sunrise={entry<Sunrise>(snap, "sunrise")} space={entry<SpaceWeather>(snap, "space")} moments={moments} />}
         {current === "weather" && <Weather e={weather} metar={entry<Metar>(snap, "metar")} air={air} night={!!night} />}
-        {current === "beach" && <Beach e={beach} now={now} />}
+        {current === "beach" && <Beach e={beach} status={beachStatus} tide={tide} now={now} />}
         {current === "sea" && <Sea table={tide} now={now} buoy={buoy} marine={entry<Marine>(snap, "marine")} />}
         {current === "sky" && (sky ? <Sky s={sky} iss={entry<Iss>(snap, "iss")} space={entry<SpaceWeather>(snap, "space")} sunrise={entry<Sunrise>(snap, "sunrise")} /> : <div className="card" style={{ minHeight: 320 }} aria-busy="true" />)}
         {current === "overhead" && <Overhead e={flights} />}

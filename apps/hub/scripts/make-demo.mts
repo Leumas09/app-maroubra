@@ -2,7 +2,7 @@
 // à la main (marquées comme telles à l'écran), passées dans les vrais calculs de l'app.
 // Usage : npx tsx scripts/make-demo.mts <ISO time> <sortie.json>
 import { readFileSync, writeFileSync } from "node:fs";
-import type { Buoy, Flights, Iss, Marine, Metar, News, SpaceWeather, Weather } from "@maroubra/core";
+import type { BeachStatus, Buoy, Flights, Iss, Marine, Metar, News, SpaceWeather, Weather } from "@maroubra/core";
 import { beach } from "../src/derive/beach";
 import { facts, ruleBrief } from "../src/derive/brief";
 import { moments } from "../src/derive/moments";
@@ -61,10 +61,21 @@ const news: News = { triagedBy: "keywords", items: Array.from({ length: 6 }, (_,
   published: new Date(at.getTime() - (i * 5 + 1) * 3600e3).toISOString(), summary: "Placeholder summary used only to test the layout.", topic: ["beach", "council", "community", "events", "environment", "transport"][i], local: true,
 })) };
 const tide = loadTide(new URL("../../web/public", import.meta.url).pathname);
-const b = beach(weather, marine, buoy, tide, at.getTime());
+// Statut officiel construit à la main : ouverte le jour, fermée (requin) dans l'instantané de nuit, pour voir les deux états.
+const reportAt = new Date(Date.parse(new Intl.DateTimeFormat("en-CA", { timeZone: "Australia/Sydney" }).format(at) + "T06:52:00+11:00")).toISOString();
+const closedDemo = localHour(nowS) >= 20;
+const beachStatus: BeachStatus = {
+  status: closedDemo ? "closed" : "open", reason: closedDemo ? "Shark sighting" : null,
+  lifeguard: closedDemo
+    ? { summary: "Beach closed", description: "Shark sighted off the north end mid afternoon. Beach closed for the rest of the day.", rips: "Be cautious", bluebottles: "None sighted", waterTemp: "20 C", waveHeight: "1m", at: reportAt, today: true, photo: null }
+    : { summary: "Rough conditions", description: "Moderate south-east swell with a strong rip at the north end. Swim between the flags.", rips: "Be cautious", bluebottles: "Some sighted", waterTemp: "20 C", waveHeight: "1-1.5m", at: reportAt, today: true, photo: null },
+  patrol: { today: true, start: "07:00", end: "19:00" }, hazard: 6,
+  water: { forecast: "Unlikely", latest: "Good", at: reportAt }, errors: [],
+};
+const b = beach(weather, marine, buoy, tide, at.getTime(), beachStatus);
 const s = scoreSunrise([{ low: 10, mid: 45, high: 30 }, { low: 10, mid: 40, high: 40 }, { low: 5, mid: 15, high: 10 }, { low: 0, mid: 5, high: 0 }]);
 const sunrise = { date: "2026-11-15", time: "2026-11-14T18:42:00Z", ...s };
 const ms = moments({ weather, beach: b, sunrise, iss, space, fires, flights }, at);
 const brief = { text: ruleBrief(facts(weather, b, "low tide at 18:40", ms, at)), at: at.toISOString(), by: "rules" };
-writeFileSync(out, JSON.stringify({ weather, metar, marine, buoy, flights, fires, air, space, iss, sunrise, news, beach: b, moments: ms, brief }));
+writeFileSync(out, JSON.stringify({ weather, metar, marine, buoy, beachStatus, flights, fires, air, space, iss, sunrise, news, beach: b, moments: ms, brief }));
 console.log(out, "beach", b.score, b.label, "moments", ms.length, "fires", fires.nearby.length, "brief:", brief.text);
