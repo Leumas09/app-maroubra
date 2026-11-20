@@ -3,7 +3,7 @@
 const { chromium } = require("playwright");
 const launch = () => chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
 const { default: AxeBuilder } = require("@axe-core/playwright");
-const views = ["weather", "beach", "sea", "sky", "overhead", "fire", "news", "track", "settings"];
+const views = ["home", "weather", "beach", "sea", "sky", "overhead", "fire", "news", "track", "settings"];
 (async () => {
   const browser = await launch();
   let total = 0;
@@ -28,5 +28,5 @@ const views = ["weather", "beach", "sea", "sky", "overhead", "fire", "news", "tr
     await ctx.close();
   }
   await browser.close();
-  console.log(total ? `${total} violation(s)` : "0 violation on login + 9 views, day and night");
+  console.log(total ? `${total} violation(s)` : "0 violation on login + 10 views, day and night");
 })();

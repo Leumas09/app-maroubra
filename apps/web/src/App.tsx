@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import type { AirQuality, Beach as BeachData, Brief, Buoy, Fires, Flights, Iss, Marine, Metar, Moment, News as NewsData, SpaceWeather, Sunrise, Weather as WeatherData } from "@maroubra/core";
-import { WxIcon } from "./components/bits";
-import { longDate, pct, time } from "./lib/format";
 import { data, entry, isDemo, useLive } from "./lib/live";
 import type { SkyModel } from "./lib/sky-model";
-import { loadTide, tideNow, type TideTable } from "./lib/tide";
+import { loadTide, type TideTable } from "./lib/tide";
 import { Beach } from "./views/Beach";
+import { Home } from "./views/Home";
 import { FireAir } from "./views/FireAir";
 import { News } from "./views/News";
 import { Overhead } from "./views/Overhead";
@@ -15,8 +14,8 @@ import { Sea } from "./views/Tide";
 import { TrackRecord } from "./views/TrackRecord";
 import { Weather } from "./views/Weather";
 
-type View = "weather" | "beach" | "sea" | "sky" | "overhead" | "fire" | "news" | "track" | "settings";
-const VIEWS: View[] = ["weather", "beach", "sea", "sky", "overhead", "fire", "news", "track", "settings"];
+type View = "home" | "weather" | "beach" | "sea" | "sky" | "overhead" | "fire" | "news" | "track" | "settings";
+const VIEWS: View[] = ["home", "weather", "beach", "sea", "sky", "overhead", "fire", "news", "track", "settings"];
 
 /** `?at=2026-11-14T09:00:00Z` fige l'heure (captures et tests). */
 function startTime(): Date | null {
@@ -81,15 +80,14 @@ export function App() {
     window.addEventListener("hashchange", on);
     return () => window.removeEventListener("hashchange", on);
   }, []);
-  // Vue par défaut selon le moment : le ciel la nuit, la plage de jour en saison chaude, sinon la météo.
-  const month = Number(new Intl.DateTimeFormat("en-AU", { month: "numeric", timeZone: "Australia/Sydney" }).format(now));
-  const current: View = view ?? (night ? "sky" : month >= 10 || month <= 4 ? "beach" : "weather");
+  // Vue par défaut : l'accueil « Today » le jour, « Tonight » la nuit.
+  const current: View = view ?? "home";
 
   useEffect(() => {
     if (night === undefined) return;
     document.documentElement.dataset.theme = night ? "night" : "day";
     document.documentElement.dataset.ambient = ambient && night ? "dim" : "";
-    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", night ? "#0B1016" : "#EEF3F5");
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", night ? "#0A0E16" : "#FAF8F4");
   }, [night, ambient]);
 
   const go = (v: View) => () => { setView(v); history.replaceState(null, "", `${location.pathname}${location.search}#${v}`); };
@@ -102,11 +100,6 @@ export function App() {
   const news = entry<NewsData>(snap, "news");
   const buoy = entry<Buoy>(snap, "buoy");
   const brief = data<Brief>(snap, "brief");
-  const tNow = tide ? tideNow(tide, now) : null;
-  const w = weather?.data;
-  const b = beach?.data;
-  const f = flights?.data;
-  const overheadNext = f?.aircraft.find((a) => a.overhead);
   const activeFires = fires?.data?.nearby.filter((x) => !/out/i.test(x.status)) ?? [];
   const urgentFire = activeFires.some((x) => x.alert === "Emergency Warning" || x.alert === "Watch and Act" || x.smokeTowardUs);
 
@@ -116,63 +109,49 @@ export function App() {
     ...(sky?.moments ?? []).filter((m) => !serverMoments.some((s) => s.title.split(" at ")[0] === m.title)).map((m) => ({ ...m, urgent: false })),
   ].filter((m) => m.at.getTime() >= now.getTime() - 15 * 60e3).sort((x, y) => Number(y.urgent) - Number(x.urgent) || x.at.getTime() - y.at.getTime()).slice(0, 8);
 
-  const tile = (v: View, label: string, value: React.ReactNode, sub: string, opts: { alert?: boolean; stale?: boolean } = {}) => (
-    <button className={`tile${opts.alert ? " alert" : ""}`} aria-current={current === v ? "page" : undefined} onClick={go(v)}>
-      <span className="label">{label}{opts.stale ? <span className="dot" aria-label="out of date" /> : null}</span>
-      <span className="value">{value}</span>
-      <span className="sub">{sub}</span>
-    </button>
+  const link = (v: View, label: string, opts: { alert?: string } = {}) => (
+    <a key={v} href={`#${v}`} className={opts.alert ? "alert" : undefined} aria-current={current === v ? "page" : undefined} onClick={(e) => { e.preventDefault(); go(v)(); }}>
+      {label}{opts.alert ? <span className="sr-only">, {opts.alert}</span> : null}
+    </a>
   );
 
   return (
     <div className="app">
-      <nav className="strip" aria-label="Maroubra right now">
-        <div className="clock">
-          <div className="time">{time(now)}</div>
-          <div className="date">{longDate(now)}</div>
-          <a className="settings-link" href="#settings" aria-current={current === "settings" ? "page" : undefined} onClick={(e) => { e.preventDefault(); go("settings")(); }}>Settings</a>
+      <aside className="rail">
+        <div className="wordmark">Maroubra</div>
+        <nav className="rail-main" aria-label="Views">
+          {link("home", night ? "Tonight" : "Today")}
+          {link("weather", "Weather")}
+          {link("beach", "Beach")}
+          {link("sea", "Sea")}
+          {link("sky", "Sky")}
+          {link("overhead", "Overhead")}
+          {link("fire", "Fire & smoke", urgentFire ? { alert: "check alerts" } : {})}
+          {link("news", "News")}
+        </nav>
+        <nav className="rail-more" aria-label="More">
+          {link("track", "Track record")}
+          {link("settings", "Settings")}
+        </nav>
+      </aside>
+
+      <main>
+        {/* Toujours présent : l'arrivée des données ne décale pas la page. */}
+        <div className="status" role="status">
+          {isDemo(snap) && <span className="pill miss">Sample data for testing, not live</span>}
+          {snap && !connected && <span className="pill wait">Reconnecting…</span>}
         </div>
-        {tile("weather", "Weather", w ? <span className="with-icon"><WxIcon code={w.current.code} night={night} />{Math.round(w.current.temp)}°</span> : "·", w ? `Feels ${Math.round(w.current.feels)}°, max ${Math.round(w.daily.find((d) => new Date(d.t * 1000 + 12 * 3600e3).toDateString() === now.toDateString())?.max ?? w.daily[0]?.max ?? w.current.temp)}°` : "Loading", { stale: weather?.stale && !!w })}
-        {tile("beach", "Beach", b ? `${b.score.toFixed(1)}` : "·", b ? (b.best ? `${b.label}, best ${time(new Date(b.best.start * 1000))}` : b.label) : "Loading", { stale: beach?.stale && !!b })}
-        {tile("sea", tNow ? (tNow.rising ? "Tide rising" : "Tide falling") : "Sea", tNow ? time(tNow.next.t) : "·", `${tNow ? `${tNow.next.kind === "high" ? "High" : "Low"}` : ""}${buoy?.data?.latest?.hs != null ? `, swell ${buoy.data.latest.hs.toFixed(1)} m` : ""}`)}
-        {tile("sky", "Sky", !sky ? "·" : sky.isNight ? pct(sky.moon.illumination) : time(sky.sun.set), !sky ? "Computing" : sky.isNight ? sky.moon.phase : "Sunset")}
-        {tile("overhead", "Overhead", f ? `${f.aircraft.filter((a) => !a.onGround).length}` : "·", overheadNext ? `${overheadNext.callsign ?? overheadNext.type} in ${overheadNext.overhead!.inMin} min` : f ? "aircraft nearby" : "Loading", { stale: flights?.stale && !!f })}
-        {tile("fire", "Fire & smoke", fires?.data ? `${activeFires.length}` : "·", fires?.data ? (urgentFire ? "Check alerts" : activeFires.length ? "within 200 km" : "No fires nearby") : "Loading", { alert: urgentFire })}
-        {tile("news", "Local news", news?.data ? `${news.data.items.length}` : "·", "Randwick, Maroubra")}
-        {tile("track", "Track record", "Scores", "Forecasts vs reality")}
-      </nav>
-
-      {/* Toujours présent, hauteur réservée : l'arrivée des données ne décale pas la page. */}
-      <div className="brief" role="status">
-        {isDemo(snap) && <span className="pill miss">Sample data for testing, not live</span>}
-        {snap && !connected && <span className="pill wait">Reconnecting…</span>}
-        <span className={brief ? undefined : "muted"}>{brief?.text ?? "Reading the sky and the sea…"}</span>
-      </div>
-
-      <div className="layout">
-        <main>
-          {current === "weather" && <Weather e={weather} metar={entry<Metar>(snap, "metar")} air={air} night={!!night} />}
-          {current === "beach" && <Beach e={beach} now={now} />}
-          {current === "sea" && <Sea table={tide} now={now} buoy={buoy} marine={entry<Marine>(snap, "marine")} />}
-          {current === "sky" && (sky ? <Sky s={sky} iss={entry<Iss>(snap, "iss")} space={entry<SpaceWeather>(snap, "space")} sunrise={entry<Sunrise>(snap, "sunrise")} /> : <div className="card" style={{ minHeight: 320 }} aria-busy="true" />)}
-          {current === "overhead" && <Overhead e={flights} />}
-          {current === "fire" && <FireAir fires={fires} />}
-          {current === "news" && <News e={news} now={now} />}
-          {current === "track" && <TrackRecord />}
-          {current === "settings" && <Settings ambient={ambient} setAmbient={setAmbient} />}
-        </main>
-        <aside className="side card" aria-labelledby="next-title">
-          <h2 id="next-title">Next 24 h</h2>
-          <ul className="list">
-            {moments.map((m) => (
-              <li key={m.title + m.at.toISOString()} className={m.urgent ? "urgent" : undefined}>
-                <span className="when">{time(m.at)}</span>
-                <span><strong>{m.title}</strong><br /><span className="muted">{m.detail}</span></span>
-              </li>
-            ))}
-          </ul>
-        </aside>
-      </div>
+        {current === "home" && <Home now={now} sky={sky} brief={brief?.text ?? null} beach={beach} weather={weather} buoy={buoy} marine={entry<Marine>(snap, "marine")} sunrise={entry<Sunrise>(snap, "sunrise")} space={entry<SpaceWeather>(snap, "space")} moments={moments} />}
+        {current === "weather" && <Weather e={weather} metar={entry<Metar>(snap, "metar")} air={air} night={!!night} />}
+        {current === "beach" && <Beach e={beach} now={now} />}
+        {current === "sea" && <Sea table={tide} now={now} buoy={buoy} marine={entry<Marine>(snap, "marine")} />}
+        {current === "sky" && (sky ? <Sky s={sky} iss={entry<Iss>(snap, "iss")} space={entry<SpaceWeather>(snap, "space")} sunrise={entry<Sunrise>(snap, "sunrise")} /> : <div className="card" style={{ minHeight: 320 }} aria-busy="true" />)}
+        {current === "overhead" && <Overhead e={flights} />}
+        {current === "fire" && <FireAir fires={fires} />}
+        {current === "news" && <News e={news} now={now} />}
+        {current === "track" && <TrackRecord />}
+        {current === "settings" && <Settings ambient={ambient} setAmbient={setAmbient} />}
+      </main>
     </div>
   );
 }

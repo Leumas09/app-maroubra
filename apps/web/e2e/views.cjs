@@ -8,7 +8,7 @@ const runs = [
   { name: "day", base: "http://localhost:8100", at: "2026-11-14T03:00:00Z" },
   { name: "night", base: "http://localhost:8101", at: "2026-11-14T11:30:00Z" },
 ];
-const views = (process.env.VIEWS || "weather,beach,sea,sky,overhead,fire,news,track,settings").split(",");
+const views = (process.env.VIEWS || "home,weather,beach,sea,sky,overhead,fire,news,track,settings").split(",");
 
 (async () => {
   const browser = await chromium.launch();
@@ -24,7 +24,7 @@ const views = (process.env.VIEWS || "weather,beach,sea,sky,overhead,fire,news,tr
     await page.click("button[type=submit]");
     await page.waitForURL(`${run.base}/`);
     for (const v of views) {
-      if (size !== "tablet" && !["beach", "sky", "overhead", "weather"].includes(v)) continue;
+      if (size !== "tablet" && !["home", "beach", "sky", "overhead", "weather"].includes(v)) continue;
       await page.goto(`${run.base}/?at=${run.at}#${v}`, { waitUntil: "networkidle" });
       await page.waitForTimeout(400);
       await page.screenshot({ path: `${out}/${size}-${run.name}-${v}.png`, fullPage: size === "tablet" });

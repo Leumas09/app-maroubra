@@ -10,11 +10,12 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@fontsource-variable/manrope": "^5.2.8",
+    "@fontsource-variable/figtree": "^5.3.0",
+    "@fontsource-variable/instrument-sans": "^5.3.0",
+    "@maroubra/core": "0.1.0",
     "@maroubra/sky": "0.1.0",
     "react": "18.3.1",
-    "react-dom": "18.3.1",
-    "@maroubra/core": "0.1.0"
+    "react-dom": "18.3.1"
   },
   "devDependencies": {
     "@types/react": "18.3.12",
