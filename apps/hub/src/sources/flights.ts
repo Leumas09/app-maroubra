@@ -9,6 +9,7 @@ import type { Collector } from "../collector";
 
 const YSSY = { lat: -33.9461, lon: 151.1772 };
 const RADIUS_NM = 25;
+const ROUTES_EVERY_MS = 30 * 60e3;
 
 /** Types rares à Sydney, pour l'alerte « avion remarquable ». */
 const RARE: Record<string, string> = {
@@ -141,10 +142,13 @@ export function flightsCollector(): Collector<Flights> {
   const routes = new Map<string, RawRoute & { at: number }>();
   const trails = new Map<string, [number, number][]>();
   const seen = new Map<string, string>(); // hex vu aujourd'hui (jour de Sydney)
+  let lastRoutes = 0;
   return {
     id: "flights",
-    everyMs: 10_000,
-    staleAfterMs: 2 * 60e3,
+    // adsb.lol limite l'accès sans clé à 500 appels par jour : un relevé toutes les 200 s (432 par jour),
+    // et les routes au plus une fois par demi-heure (48 par jour). Solution d'attente avant adsb.fi.
+    everyMs: 200_000,
+    staleAfterMs: 10 * 60e3,
     run: async ({ now }) => {
       const j = await fetchJson<{ ac?: RawAc[] }>(`https://api.adsb.lol/v2/point/${SITE.lat}/${SITE.lon}/${RADIUS_NM}`);
       const raw = j.ac ?? [];
@@ -158,7 +162,8 @@ export function flightsCollector(): Collector<Flights> {
       for (const hex of trails.keys()) if (!raw.some((r) => r.hex === hex)) trails.delete(hex);
       // Routes des indicatifs inconnus, par lots, gardées 6 h
       const missing = raw.filter((r) => r.flight?.trim() && r.lat != null && (!routes.has(r.flight.trim()) || now.getTime() - routes.get(r.flight.trim())!.at > 6 * 3600e3));
-      if (missing.length) {
+      if (missing.length && now.getTime() - lastRoutes >= ROUTES_EVERY_MS) {
+        lastRoutes = now.getTime();
         try {
           const res = await fetchJson<RawRoute[]>("https://api.adsb.lol/api/0/routeset", {
             method: "POST", headers: { "Content-Type": "application/json" },

@@ -27,7 +27,7 @@ export function destination(lat: number, lon: number, bearing: number, km: numbe
 }
 
 /** Au-delà, on ne prolonge plus : la position est trop vieille (ou l'heure est figée pour une capture). */
-export const MAX_EXTRAPOLATE_S = 90;
+export const MAX_EXTRAPOLATE_S = 240;
 
 type Moving = Pick<Aircraft, "lat" | "lon" | "posAt" | "speedKt" | "track" | "onGround">;
 
