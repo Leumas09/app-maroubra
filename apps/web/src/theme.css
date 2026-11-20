@@ -185,6 +185,62 @@ th { color: var(--muted); font-weight: 500; }
 .btn:hover { filter: brightness(1.06); }
 .btn:active { transform: translateY(1px); }
 .btn.ghost { background: linear-gradient(var(--paper-2), var(--paper-3)); color: var(--ink); border-color: var(--rule); }
+/* Overhead : carte des avions, fiche de l'avion choisi, viseur du ciel */
+.map-panel { overflow: hidden; display: grid; gap: 10px; }
+.map-tools { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.map-tools-right { display: flex; gap: 8px; }
+.btn.small { min-height: 40px; padding: 0 16px; font-size: 15px; }
+.seg { display: inline-flex; padding: 3px; border-radius: 999px; background: var(--slot); box-shadow: inset 0 1px 2px var(--slot-shade); }
+.seg button { border: 0; background: none; border-radius: 999px; padding: 0 14px; min-height: 36px; font-size: 14px; font-weight: 500; color: var(--ink-2); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--paper); color: var(--ink); box-shadow: var(--edge-light), 0 1px 2px var(--slot-shade); }
+.seg button:disabled { opacity: 0.45; cursor: not-allowed; }
+.flight-map { position: relative; height: min(66vh, 620px); min-height: 360px; border-radius: 12px; overflow: hidden; background: var(--sea); isolation: isolate; }
+.flight-canvas { position: absolute; inset: 0; z-index: 450; pointer-events: none; }
+.flight-map.leaflet-container { font: inherit; background: var(--sea); }
+.flight-map .leaflet-control-attribution { background: color-mix(in oklch, var(--paper) 82%, transparent); color: var(--muted); font-size: 11px; }
+.flight-map .leaflet-control-attribution a { color: var(--ink-2); }
+.flight-map .leaflet-bar { border: 1px solid var(--rule); box-shadow: 0 1px 2px var(--slot-shade); border-radius: 10px; overflow: hidden; }
+.flight-map .leaflet-bar a { background: var(--paper); color: var(--ink); border-bottom-color: var(--rule); width: 36px; height: 36px; line-height: 36px; }
+.flight-map .leaflet-bar a:hover { background: var(--paper-2); }
+.map-tip { background: none; border: 0; box-shadow: none; padding: 0 4px; font-weight: 700; font-size: 13px; color: var(--muted); text-shadow: 0 0 3px var(--paper), 0 0 3px var(--paper); }
+.map-tip.home { color: var(--ink); font-weight: 800; font-size: 14px; }
+.map-tip::before { display: none; }
+.flight-map[data-base="satellite"] .map-tip { color: #fff; text-shadow: 0 0 3px #000, 0 0 3px #000; }
+.card.emergency { border-top: 2px solid var(--alert); padding: 14px 0; color: var(--miss-ink); line-height: 1.5; }
+.link-btn { all: unset; cursor: pointer; color: var(--accent); text-decoration: underline; font-weight: 500; }
+.link-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.alert-text { color: var(--miss-ink); }
+.row-btn.is-alert strong, .row-btn.is-alert .muted { color: var(--miss-ink); }
+.ac-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.ac-head .pill { margin-left: auto; flex: none; }
+.ac-title { margin: 0 !important; font-family: var(--display); font-size: 30px !important; font-weight: 500 !important; color: var(--ink) !important; letter-spacing: -0.02em; line-height: 1.1; }
+.airline-badge { flex: none; display: grid; place-items: center; width: 48px; height: 48px; border-radius: 12px; font-weight: 800; font-size: 17px; letter-spacing: 0.02em; box-shadow: var(--edge-light), 0 1px 2px var(--slot-shade); }
+.ac-photo { margin: 0 0 14px; }
+.ac-photo-frame { width: 100%; border-radius: 12px; overflow: hidden; background: var(--paper-3); }
+.ac-photo-frame img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.ac-photo figcaption { font-size: 12px; color: var(--muted); margin-top: 6px; }
+.ac-photo figcaption a { color: var(--muted); }
+.leg { margin: 4px 0 14px; }
+.leg-ends { display: flex; justify-content: space-between; align-items: end; gap: 12px; }
+.leg-bar { position: relative; height: 6px; margin: 14px 8px 10px; border-radius: 999px; background: var(--slot); box-shadow: inset 0 1px 2px var(--slot-shade); }
+.leg-done { position: absolute; inset: 0 auto 0 0; border-radius: 999px; background: var(--accent); }
+.leg-plane { position: absolute; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; background: var(--paper); border: 3px solid var(--accent); box-sizing: border-box; }
+.leg-note { font-size: 14px; margin: 0 0 4px; }
+.ac-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+.skyfinder { position: fixed; inset: 0; z-index: 2000; background: linear-gradient(var(--sky-top), var(--sky-bottom)); color: #fff; touch-action: none; }
+:root[data-theme="day"] .skyfinder { background: linear-gradient(oklch(52% 0.09 235), oklch(72% 0.06 220)); }
+.skyfinder-video, .skyfinder-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.skyfinder-video { object-fit: cover; }
+.skyfinder-canvas { cursor: grab; }
+.skyfinder-top, .skyfinder-bottom { position: absolute; left: 0; right: 0; padding: 14px 16px; background: oklch(0% 0 0 / 0.45); backdrop-filter: blur(6px); }
+.skyfinder-top { top: 0; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding-top: max(14px, env(safe-area-inset-top)); }
+.skyfinder-top strong { display: block; font-size: 17px; }
+.skyfinder-dir { font-size: 13px; opacity: 0.85; }
+.skyfinder-bottom { bottom: 0; padding-bottom: max(14px, env(safe-area-inset-bottom)); }
+.skyfinder-focus { margin: 0 0 6px; font-size: 16px; line-height: 1.4; }
+.skyfinder-hint { margin: 0; font-size: 13px; opacity: 0.85; line-height: 1.4; }
+.skyfinder .btn.ghost { min-height: 40px; }
+
 /* Écran ambiant la nuit : luminosité réduite pour ne pas éclairer la pièce */
 :root[data-ambient="dim"] body { filter: brightness(0.62); }
 
@@ -209,6 +265,8 @@ th { color: var(--muted); font-weight: 500; }
   .chart-scroll .chart { min-width: 760px; }
   .huge { font-size: 56px; }
   .lede { font-size: 22px; }
+  .flight-map { height: 62vh; min-height: 320px; }
+  .ac-title { font-size: 26px !important; }
 }
 @media (prefers-reduced-motion: no-preference) {
   .rail a { transition: color 0.2s, box-shadow 0.2s; }

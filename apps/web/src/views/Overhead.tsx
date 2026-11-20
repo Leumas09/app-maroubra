@@ -1,70 +1,149 @@
-import type { Aircraft, Flights, SourceEntry } from "@maroubra/core";
-import { useState } from "react";
+import type { Aircraft, AircraftPhoto, Flights, SourceEntry } from "@maroubra/core";
+import { useEffect, useMemo, useState } from "react";
 import { CardHead, Empty, Fresh } from "../components/bits";
-import land from "../data/sydney-land.json";
+import { FlightMap, label, type Base } from "../components/FlightMap";
+import { requestMotion, SkyFinder } from "../components/SkyFinder";
 import { compass } from "../lib/format";
+import { Motion } from "../lib/motion";
 
 type E<T> = (SourceEntry<T> & { stale: boolean; ageMin: number | null }) | null;
 
-const HOME = { lat: -33.9496, lon: 151.2577 };
-const YSSY = { lat: -33.9461, lon: 151.1772 };
-// Projection équirectangulaire locale centrée sur Maroubra, 30 km de rayon environ.
-const SPAN_LON = 0.5, SPAN_LAT = SPAN_LON * Math.cos((HOME.lat * Math.PI) / 180);
-const W = 1000, H = 640;
-const sx = (lon: number) => W / 2 + ((lon - HOME.lon) / SPAN_LON) * W;
-const sy = (lat: number) => H / 2 - ((lat - HOME.lat) / SPAN_LAT) * W;
-const kmPx = (km: number) => (km / 111.32 / SPAN_LAT) * W;
-
-function landPath(): string {
-  const g = land.geometry as { type: string; coordinates: number[][][][] | number[][][] };
-  const polys = (g.type === "Polygon" ? [g.coordinates] : g.coordinates) as number[][][][];
-  return polys.map((poly) => poly.map((ring) => ring.map(([lo, la], i) => `${i ? "L" : "M"}${sx(lo).toFixed(1)},${sy(la).toFixed(1)}`).join(" ") + " Z").join(" ")).join(" ");
-}
-const LAND = landPath();
-
-const PLANE = "M12 2l1.6 7 7.4 4v2l-7.4-2.5-.6 5.5 2.5 2v1.5L12 20.5 8.5 21.5V20l2.5-2-.6-5.5L3 15v-2l7.4-4z";
 const ft = (a: Aircraft) => (a.onGround ? "on ground" : a.altFt != null ? `${a.altFt.toLocaleString("en-AU")} ft` : "n/a");
+const NONE: Aircraft[] = [];
+const nf = (n: number) => n.toLocaleString("en-AU");
 
-function Map({ f, sel, pick }: { f: Flights; sel: string | null; pick: (hex: string) => void }) {
+/** « BOEING 737-800 » devient « Boeing 737-800 » ; les sigles courts restent en capitales. */
+const titleCase = (s: string) => s.split(/\s+/).map((w) => (/\d/.test(w) || w.length <= 3 ? w : w[0] + w.slice(1).toLowerCase())).join(" ");
+
+const store = {
+  get: (k: string) => { try { return localStorage.getItem(k); } catch { return null; } },
+  set: (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* ignoré */ } },
+};
+
+// Photos déjà demandées pendant la session (une requête par avion).
+const photos = new Map<string, Promise<AircraftPhoto | null>>();
+function usePhoto(hex: string, reg: string | null): AircraftPhoto | null | undefined {
+  const [p, setP] = useState<AircraftPhoto | null | undefined>(undefined);
+  useEffect(() => {
+    let live = true;
+    setP(undefined);
+    if (!/^[0-9a-f]{6}$/i.test(hex)) { setP(null); return; }
+    const key = `${hex}|${reg ?? ""}`;
+    if (!photos.has(key)) {
+      photos.set(key, fetch(`/api/aircraft/${hex}/photo${reg ? `?reg=${encodeURIComponent(reg)}` : ""}`, { credentials: "same-origin" })
+        .then((r) => (r.ok ? r.json() : { photo: null })).then((j: { photo: AircraftPhoto | null }) => j.photo).catch(() => null));
+    }
+    photos.get(key)!.then((x) => live && setP(x));
+    return () => { live = false; };
+  }, [hex, reg]);
+  return p;
+}
+
+/** Texte blanc ou presque noir sur la couleur de la compagnie, selon ce qui contraste le mieux (WCAG). */
+function inkOn(hex: string): string {
+  const lin = (c: number) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+  const [r, g, b] = [1, 3, 5].map((i) => lin(parseInt(hex.slice(i, i + 2), 16) / 255));
+  const l = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return 1.05 / (l + 0.05) >= 4.5 ? "#fff" : "#141414";
+}
+
+function AirlineBadge({ a }: { a: Aircraft }) {
+  if (!a.airline) return null;
+  return <span className="airline-badge" style={{ background: a.airline.color, color: inkOn(a.airline.color) }} aria-hidden="true">{a.airline.iata}</span>;
+}
+
+function Photo({ a }: { a: Aircraft }) {
+  const p = usePhoto(a.hex, a.reg);
+  if (p === null) return null;
   return (
-    <svg className="chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Map of ${f.aircraft.length} aircraft around Maroubra`}>
-      <rect width={W} height={H} fill="var(--sea)" rx="14" />
-      <path d={LAND} fill="var(--land)" stroke="var(--line)" strokeWidth="1" />
-      {[5, 10, 20].map((km) => (
-        <g key={km}>
-          <circle cx={sx(HOME.lon)} cy={sy(HOME.lat)} r={kmPx(km)} fill="none" stroke="var(--accent)" strokeOpacity="0.35" strokeDasharray="4 6" />
-          <text x={sx(HOME.lon) + kmPx(km) * 0.71 + 4} y={sy(HOME.lat) - kmPx(km) * 0.71 - 4} fontSize="12" fill="var(--accent)">{km} km</text>
-        </g>
-      ))}
-      <text x={sx(YSSY.lon)} y={sy(YSSY.lat) + 34} textAnchor="middle" fontSize="13" fontWeight="700" fill="var(--muted)">Sydney Airport</text>
-      <text x={sx(151.17)} y={sy(-34.01)} textAnchor="middle" fontSize="13" fontStyle="italic" fill="var(--muted)">Botany Bay</text>
-      <text x={sx(151.45)} y={sy(-33.86)} textAnchor="middle" fontSize="13" fontStyle="italic" fill="var(--muted)">Tasman Sea</text>
-      <circle cx={sx(HOME.lon)} cy={sy(HOME.lat)} r="7" fill="var(--accent)" stroke="var(--card)" strokeWidth="3" />
-      <text x={sx(HOME.lon) + 12} y={sy(HOME.lat) + 4} fontSize="14" fontWeight="800" fill="var(--ink)">Maroubra</text>
-      {f.aircraft.filter((a) => !a.onGround).map((a) => {
-        const on = a.hex === sel;
-        const color = on ? "var(--alert)" : a.interesting ? "var(--sun)" : "var(--ink)";
-        return (
-          <g key={a.hex} onClick={() => pick(a.hex)} style={{ cursor: "pointer" }}>
-            {a.trail.length > 1 && <path d={a.trail.map(([la, lo], i) => `${i ? "L" : "M"}${sx(lo)},${sy(la)}`).join(" ")} fill="none" stroke={color} strokeOpacity="0.4" strokeWidth="2" />}
-            <g transform={`translate(${sx(a.lon) - 13},${sy(a.lat) - 13}) rotate(${a.track ?? 0} 13 13)`}>
-              <path d={PLANE} transform="scale(1.08)" fill={color} stroke="var(--card)" strokeWidth="1" />
-            </g>
-            <text x={sx(a.lon) + 16} y={sy(a.lat) + 4} fontSize="13" fontWeight="700" fill={color}>{a.callsign ?? a.reg ?? a.hex}</text>
-          </g>
-        );
-      })}
-      <text x={W - 10} y={H - 10} textAnchor="end" fontSize="11" fill="var(--muted)">Map © OpenStreetMap contributors. Positions: adsb.lol</text>
-    </svg>
+    <figure className="ac-photo">
+      <div className="ac-photo-frame" style={{ aspectRatio: p ? `${p.width} / ${p.height}` : "3 / 2" }}>
+        {p && <img src={p.src} alt={`${a.reg ?? label(a)}, ${a.desc ? titleCase(a.desc) : a.type ?? "aircraft"}`} referrerPolicy="no-referrer" loading="lazy" />}
+      </div>
+      {p && <figcaption>Photo <a href={p.link} target="_blank" rel="noopener noreferrer">{p.photographer} / Planespotters</a></figcaption>}
+    </figure>
   );
 }
 
-export function Overhead({ e }: { e: E<Flights> }) {
+function Selected({ a, follow, setFollow, openSky }: { a: Aircraft; follow: boolean; setFollow: (v: boolean) => void; openSky: () => void }) {
+  const trend = a.vrate == null || a.onGround ? "" : a.vrate > 300 ? `, climbing ${nf(Math.round(a.vrate / 50) * 50)} ft/min` : a.vrate < -300 ? `, descending ${nf(Math.round(-a.vrate / 50) * 50)} ft/min` : ", level";
+  const hoursLeft = a.progress && a.speedKt && a.speedKt >= 100 ? a.progress.leftKm / (a.speedKt * 1.852) : null;
+  const sub = [a.airline?.name ?? a.operator, a.flightNo && a.callsign ? `callsign ${a.callsign}` : null].filter(Boolean).join(", ");
+  return (
+    <div className="card ac-card">
+      <div className="ac-head">
+        <AirlineBadge a={a} />
+        <div style={{ minWidth: 0 }}>
+          <h2 className="ac-title">{label(a)}</h2>
+          {sub && <div className="muted">{sub}</div>}
+        </div>
+        {a.emergency ? <span className="pill miss">{a.emergency}</span> : a.rare ? <span className="pill good">{a.rare}</span> : null}
+      </div>
+      <Photo a={a} />
+      {a.route && (
+        <div className="leg">
+          <div className="leg-ends">
+            <div><div className="big">{a.route.from?.iata ?? "?"}</div><div className="muted">{a.route.from?.location}</div></div>
+            <div style={{ textAlign: "right" }}><div className="big">{a.route.to?.iata ?? "?"}</div><div className="muted">{a.route.to?.location}</div></div>
+          </div>
+          {a.progress && (
+            <>
+              <div className="leg-bar" role="img" aria-label={`${Math.round(a.progress.pct)}% of the way from ${a.route.from?.iata} to ${a.route.to?.iata}`}>
+                <span className="leg-done" style={{ width: `${a.progress.pct}%` }} />
+                <span className="leg-plane" style={{ left: `${a.progress.pct}%` }} />
+              </div>
+              <p className="muted leg-note">
+                {nf(a.progress.flownKm)} km flown, {nf(a.progress.leftKm)} km to go
+                {hoursLeft != null ? `, about ${hoursLeft >= 1 ? `${Math.floor(hoursLeft)} h ${String(Math.round((hoursLeft % 1) * 60)).padStart(2, "0")}` : `${Math.max(1, Math.round(hoursLeft * 60))} min`} at current speed` : ""}.
+              </p>
+            </>
+          )}
+          {a.route.codes.split("-").length > 2 && <p className="muted leg-note">Full route {a.route.codes.replaceAll("-", " to ")}.</p>}
+        </div>
+      )}
+      <dl className="kv">
+        <dt>Aircraft</dt><dd>{a.desc ? titleCase(a.desc) : a.type ?? "n/a"}</dd>
+        {a.reg && <><dt>Registration</dt><dd>{a.reg}{a.built ? `, built ${a.built}` : ""}</dd></>}
+        {a.operator && a.airline && !a.operator.toLowerCase().includes(a.airline.name.toLowerCase().split(" ")[0]) && <><dt>Operator</dt><dd>{titleCase(a.operator)}</dd></>}
+        <dt>Altitude</dt><dd>{ft(a)}{trend}</dd>
+        <dt>Speed</dt><dd>{a.speedKt != null ? `${nf(Math.round(a.speedKt * 1.852))} km/h (${Math.round(a.speedKt)} kt)` : "n/a"}</dd>
+        {a.track != null && <><dt>Heading</dt><dd>{compass(a.track)} ({Math.round(a.track)}°)</dd></>}
+        <dt>Squawk</dt><dd className={a.emergency ? "alert-text" : undefined}>{a.squawk ?? "n/a"}{a.emergency ? `, ${a.emergency.toLowerCase()}` : ""}</dd>
+        <dt>From Maroubra</dt><dd>{a.distKm} km {compass(a.bearing)}</dd>
+        {a.overhead && <><dt>Overhead</dt><dd>in {a.overhead.inMin} min</dd></>}
+        {a.source && <><dt>Position</dt><dd>{a.source}</dd></>}
+      </dl>
+      <div className="ac-actions">
+        <button className={`btn ${follow ? "" : "ghost"}`} aria-pressed={follow} onClick={() => setFollow(!follow)}>{follow ? "Following" : "Follow on map"}</button>
+        {!a.onGround && <button className="btn ghost" onClick={openSky}>Find in the sky</button>}
+      </div>
+    </div>
+  );
+}
+
+export function Overhead({ e, night, demo }: { e: E<Flights>; night: boolean; demo: boolean }) {
   const f = e?.data;
   const [sel, setSel] = useState<string | null>(null);
+  const [follow, setFollow] = useState(false);
+  const [sky, setSky] = useState(false);
+  const [homeTick, setHomeTick] = useState(0);
+  const [chosen, setChosen] = useState<Base>(() => (store.get("mb.mapBase") as Base | null) ?? "map");
+  const setBase = (b: Base) => { setChosen(b); store.set("mb.mapBase", b); };
+  // Données de démonstration : hors ligne, donc sans tuiles.
+  const base: Base = demo ? "plain" : chosen;
+  const calm = useMemo(() => matchMedia("(prefers-reduced-motion: reduce)").matches, []);
+
+  const motion = useMemo(() => new Motion(), []);
+  const aircraft = f?.aircraft ?? NONE;
+  useEffect(() => { motion.update(aircraft, Date.now()); }, [aircraft, motion]);
+
   if (!f) return <section className="card"><CardHead title="Overhead"><Fresh e={e} /></CardHead><Empty>Waiting for aircraft positions.</Empty></section>;
   const airborne = f.aircraft.filter((a) => !a.onGround);
-  const s = airborne.find((a) => a.hex === sel) ?? airborne.find((a) => a.overhead) ?? airborne[0];
+  const emergencies = f.aircraft.filter((a) => a.emergency);
+  const s = f.aircraft.find((a) => a.hex === sel) ?? emergencies[0] ?? airborne.find((a) => a.overhead) ?? airborne[0];
+  const pick = (hex: string) => { setSel(hex); if (hex !== s?.hex) setFollow(false); };
+  const openSky = () => { void requestMotion(); setSky(true); };
+
   return (
     <section aria-labelledby="ov-title" style={{ display: "grid", gap: 16 }}>
       <div className="card">
@@ -75,35 +154,38 @@ export function Overhead({ e }: { e: E<Flights> }) {
           {f.curfew ? " Airport curfew until 06:00: only exempt flights." : ""} {f.seenToday} flights over the suburb today.
         </p>
       </div>
-      <div className="card chart-scroll" style={{ padding: 12 }}><Map f={f} sel={s?.hex ?? null} pick={setSel} /></div>
-      <div className="grid">
-        {s && (
-          <div className="card">
-            <h2>{s.callsign ?? s.reg ?? s.hex}{s.rare ? ` · ${s.rare}` : ""}</h2>
-            {s.route && (
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", margin: "4px 0 12px" }}>
-                <div><div className="big">{s.route.from?.iata ?? "?"}</div><div className="muted">{s.route.from?.location}</div></div>
-                <div className="muted">to</div>
-                <div style={{ textAlign: "right" }}><div className="big">{s.route.to?.iata ?? "?"}</div><div className="muted">{s.route.to?.location}</div></div>
-              </div>
-            )}
-            <dl className="kv">
-              <dt>Aircraft</dt><dd>{s.type ?? "n/a"}{s.reg ? `, ${s.reg}` : ""}</dd>
-              <dt>Altitude</dt><dd>{ft(s)}{s.vrate ? (s.vrate > 300 ? ", climbing" : s.vrate < -300 ? ", descending" : "") : ""}</dd>
-              <dt>Speed</dt><dd>{s.speedKt != null ? `${Math.round(s.speedKt * 1.852)} km/h` : "n/a"}</dd>
-              <dt>From Maroubra</dt><dd>{s.distKm} km {compass(s.bearing)}</dd>
-              {s.overhead && <><dt>Overhead</dt><dd>in {s.overhead.inMin} min</dd></>}
-            </dl>
+      {emergencies.map((a) => (
+        <div key={a.hex} className="card emergency" role="alert">
+          <strong>{label(a)}{a.squawk ? ` squawking ${a.squawk}` : ""}: {a.emergency}.</strong>{" "}
+          {a.airline?.name ?? a.type ?? "Aircraft"}{a.route ? ` ${a.route.codes}` : ""}, {a.distKm} km {compass(a.bearing)}, {ft(a)}.{" "}
+          <button className="link-btn" onClick={() => { pick(a.hex); setFollow(true); }}>Show on map</button>
+        </div>
+      ))}
+      <div className="card chart-scroll map-panel">
+        <div className="map-tools">
+          <div className="seg" role="group" aria-label="Map background">
+            {(["map", "satellite", "plain"] as Base[]).map((b) => (
+              <button key={b} aria-pressed={base === b} onClick={() => setBase(b)} disabled={demo && b !== "plain"}>{b === "map" ? "Map" : b === "satellite" ? "Satellite" : "Plain"}</button>
+            ))}
           </div>
-        )}
+          <div className="map-tools-right">
+            <button className="btn ghost small" onClick={() => { setFollow(false); setHomeTick((n) => n + 1); }}>Home</button>
+            <button className="btn small" onClick={openSky}>Sky finder</button>
+          </div>
+        </div>
+        <FlightMap aircraft={f.aircraft} motion={motion} selected={s?.hex ?? null} follow={follow} base={base} night={night} calm={calm}
+          onPick={pick} onStopFollow={() => setFollow(false)} homeTick={homeTick} />
+      </div>
+      <div className="grid">
+        {s && <Selected a={s} follow={follow} setFollow={setFollow} openSky={() => { setSel(s.hex); openSky(); }} />}
         <div className="card">
           <h2>Nearest first</h2>
           <ul className="list planes">
-            {airborne.slice(0, 8).map((a) => (
+            {airborne.slice(0, 10).map((a) => (
               <li key={a.hex}>
-                <button className="row-btn" onClick={() => setSel(a.hex)} aria-pressed={a.hex === s?.hex}>
-                  <strong>{a.callsign ?? a.hex}</strong>
-                  <span className="muted">{a.route?.codes ?? a.type ?? ""}</span>
+                <button className={`row-btn${a.emergency ? " is-alert" : ""}`} onClick={() => pick(a.hex)} aria-pressed={a.hex === s?.hex}>
+                  <strong>{label(a)}</strong>
+                  <span className="muted">{a.emergency ?? a.route?.codes ?? a.type ?? ""}</span>
                   <span>{ft(a)}</span>
                 </button>
               </li>
@@ -111,6 +193,7 @@ export function Overhead({ e }: { e: E<Flights> }) {
           </ul>
         </div>
       </div>
+      {sky && <SkyFinder aircraft={f.aircraft} motion={motion} focus={s?.hex ?? null} onFocus={setSel} onClose={() => setSky(false)} />}
     </section>
   );
 }
