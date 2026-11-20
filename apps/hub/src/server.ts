@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { Auth, clientIp, COOKIE, LoginLimiter } from "./auth";
 import type { Config } from "./config";
 import { loginPage } from "./login-page";
+import type { PhotoFinder } from "./photos";
 import type { Push } from "./push";
 import type { Store } from "./store";
 
@@ -15,7 +16,10 @@ import type { Store } from "./store";
 export const SSE_MAX_MS = 200_000;
 const SSE_HEARTBEAT_MS = 15_000;
 
-export function createApp(cfg: Config, store: Store, deps: { push?: Push } = {}) {
+/** Hôtes d'images externes : webcams de la mairie de Randwick, fonds de carte (CARTO, Esri) et photos d'avions (Planespotters). */
+const IMG_HOSTS = "https://www.randwick.nsw.gov.au https://*.basemaps.cartocdn.com https://server.arcgisonline.com https://*.plnspttrs.net https://*.planespotters.net";
+
+export function createApp(cfg: Config, store: Store, deps: { push?: Push; photos?: PhotoFinder } = {}) {
   const app = new Hono();
   const auth = new Auth(cfg.password!, cfg.sessionSecret);
   const limiter = new LoginLimiter();
@@ -30,8 +34,8 @@ export function createApp(cfg: Config, store: Store, deps: { push?: Push } = {})
     if (cfg.secureCookies) c.header("Strict-Transport-Security", "max-age=31536000");
     c.header(
       "Content-Security-Policy",
-      "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://www.randwick.nsw.gov.au; " +
-        "font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+      `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: ${IMG_HOSTS}; ` +
+        `font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'`,
     );
   });
 
@@ -118,6 +122,17 @@ export function createApp(cfg: Config, store: Store, deps: { push?: Push } = {})
         unsubscribe();
       }
     });
+  });
+
+  // Photo d'un avion, à la demande (clic sur l'avion) : adresse OACI à 6 chiffres hexadécimaux, immatriculation facultative.
+  app.get("/api/aircraft/:hex/photo", async (c) => {
+    const hex = c.req.param("hex").toLowerCase();
+    const reg = c.req.query("reg")?.toUpperCase() ?? null;
+    if (!/^[0-9a-f]{6}$/.test(hex) || (reg && !/^[A-Z0-9-]{2,10}$/.test(reg))) return c.json({ error: "bad aircraft" }, 400);
+    if (!deps.photos) return c.json({ photo: null });
+    const photo = await deps.photos(hex, reg).catch(() => null);
+    c.header("Cache-Control", "private, max-age=86400");
+    return c.json({ photo });
   });
 
   if (deps.push) {

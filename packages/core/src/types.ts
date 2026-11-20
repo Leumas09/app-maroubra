@@ -89,6 +89,12 @@ export interface Aircraft {
   callsign: string | null;
   reg: string | null;
   type: string | null;
+  /** Désignation lisible du type, quand la base d'adsb.lol la connaît (« BOEING 737-800 »). */
+  desc: string | null;
+  /** Catégorie ADS-B (A1 léger à A5 lourd, A7 hélicoptère, B1 planeur...). */
+  category: string | null;
+  operator: string | null;
+  built: number | null; // année de construction
   altFt: number | null; // null au sol
   onGround: boolean;
   speedKt: number | null;
@@ -96,21 +102,51 @@ export interface Aircraft {
   vrate: number | null;
   lat: number;
   lon: number;
+  /** Instant de la position (ms depuis 1970), pour l'extrapolation côté app. */
+  posAt: number;
+  /** Origine de la position : ADS-B, MLAT, TIS-B... */
+  source: string | null;
+  squawk: string | null;
   distKm: number;
   bearing: number;
   military: boolean;
   interesting: boolean;
   rare: string | null; // pourquoi il est remarquable
-  emergency: string | null;
+  emergency: string | null; // libellé lisible (« General emergency »)
+  airline: Airline | null;
+  /** Numéro de vol commercial déduit de l'indicatif (QFA1 donne QF1), seulement si la compagnie numérote ainsi. */
+  flightNo: string | null;
+  /** Route complète (codes) ; from et to désignent l'étape en cours. */
   route: { codes: string; from?: Airport; to?: Airport } | null;
+  /** Avancement sur l'étape en cours, mesuré en distance (pas une prévision). */
+  progress: { pct: number; flownKm: number; leftKm: number } | null;
   overhead: { inMin: number; closestKm: number } | null;
   trail: [number, number][];
 }
 
-export interface Airport {
+export interface Airline {
+  icao: string;
   iata: string;
   name: string;
+  color: string;
+}
+
+export interface Airport {
+  iata: string;
+  icao?: string;
+  name: string;
   location: string;
+  lat?: number;
+  lon?: number;
+}
+
+/** Photo d'un avion (Planespotters), affichée avec le nom du photographe et un lien vers la page d'origine. */
+export interface AircraftPhoto {
+  src: string;
+  width: number;
+  height: number;
+  link: string;
+  photographer: string;
 }
 
 export interface Flights {

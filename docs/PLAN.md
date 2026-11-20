@@ -519,3 +519,26 @@ La politique de sécurité du site autorise les images de `www.randwick.nsw.gov.
 - Les sauveteurs publient le matin ; une fermeture en cours de journée (requin) peut ne pas apparaître.
 - Les flux vidéo des caméras ne sont pas intégrés dans la page : ni l'adresse du flux ni le droit de l'intégrer ne sont vérifiés. Les cartes ouvrent la page des caméras de la mairie.
 - Pas de flux public SharkSmart : les fermetures pour requin passent par le rapport des sauveteurs.
+
+## Partie J : Overhead au niveau d'un radar de vols (20 novembre 2026)
+
+Premier lot choisi par Samuel dans la liste des fonctionnalités de Flightradar24 (n° 1, 2, 3, 4, 9, 17, 18, 19, 21, 23, 48, 50).
+
+| Fonction | Réalisation | Juge |
+|---|---|---|
+| Carte zoomable (1) et fonds au choix (2) | Leaflet 1.9.4 ; fonds « Map » (CARTO Positron le jour, Dark Matter la nuit), « Satellite » (Esri World Imagery), « Plain » (trait de côte OSM local, sans réseau, imposé en démonstration) | Test Playwright : tuiles CARTO et Esri demandées aux bonnes URL et acceptées par la CSP |
+| Mouvement continu (3) | `apps/web/src/lib/motion.ts` : extrapolation à la vitesse sol depuis `posAt`, écart fondu en 1 s à chaque relevé, rien au-delà de 90 s | Tests unitaires ; test Playwright : le calque bouge avec une position fraîche, reste figé avec une position ancienne |
+| Silhouettes (4) | 9 formes vues de dessus (quadriréacteur, gros porteur, moyen-courrier, réacteurs arrière, turbopropulseur, léger, hélicoptère, planeur, chasseur), choisies par type OACI puis catégorie ADS-B, taille selon l'avion | Tests unitaires |
+| Suivi (9) | Bouton « Follow on map », arrêté dès qu'on déplace la carte | Test Playwright |
+| Photo (17) | `GET /api/aircraft/:hex/photo` : API Planespotters (adresse, puis immatriculation), 24 h en mémoire ; image servie par Planespotters avec nom du photographe et lien | Tests unitaires et de route ; seuls les hôtes Planespotters sont acceptés |
+| Compagnie (18) et n° de vol (19) | `apps/hub/src/sources/airlines.ts` : 59 compagnies vues à Sydney, pastille couleur (pas de logo, pour ne pas reprendre de marques déposées) ; numéro commercial seulement si la compagnie numérote ainsi (pas pour QantasLink) | Tests unitaires |
+| Avancement (21) | Étape en cours d'une route à escales (celle qui fait le moins de détour), distance parcourue et restante, durée « at current speed » : un calcul, pas une heure d'arrivée prévue | Tests unitaires |
+| Squawk (23) et urgences (48) | Champ `emergency` de readsb, à défaut 7500, 7600, 7700 ; bandeau, cercle rouge sur la carte, moment prioritaire et notification (type « plane ») à moins de 60 km | Tests unitaires |
+| Sky finder (50) | Caméra arrière, capteurs d'orientation (absolus sur Android, `webkitCompassHeading` sur iOS), projection perspective avec la courbure de la Terre ; glisser corrige la boussole ; sans capteurs, on regarde autour en glissant ou aux flèches | Tests unitaires de géométrie ; test Playwright du mode glisser |
+
+**À vérifier en production**, car le réseau de la session de développement ne joignait ni adsb.lol, ni Planespotters, ni les serveurs de tuiles :
+
+- que `routeset` d'adsb.lol renvoie bien `lat` et `lon` des aéroports (sinon la route s'affiche sans barre d'avancement), et que `/v2/point` donne `desc`, `ownOp`, `year`, `category` et `type` ;
+- que Planespotters accepte les appels du hub et l'affichage de ses miniatures sans en-tête Referer ;
+- le Sky finder sur un iPhone et un Android, dehors : alignement des étiquettes sur les avions réels, avant et après réglage par glissement ;
+- la consommation de tuiles : CARTO est gratuit jusqu'à 75 000 affichages par mois pour un usage non commercial, largement au-dessus d'un usage familial.

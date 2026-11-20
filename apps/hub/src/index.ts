@@ -9,6 +9,7 @@ import { due, moments } from "./derive/moments";
 import { sunrise } from "./derive/sunrise";
 import { loadTide } from "./derive/tide";
 import { foundryLlm } from "./llm";
+import { photoFinder } from "./photos";
 import { Push } from "./push";
 import { createApp } from "./server";
 import { flightsCollector } from "./sources/flights";
@@ -86,7 +87,7 @@ if (archive && !cfg.offline) {
   setTimeout(() => { tick(); setInterval(tick, 3600e3); }, 5 * 60e3);
 }
 
-const app = createApp(cfg, store, { push: push ?? undefined });
+const app = createApp(cfg, store, { push: push ?? undefined, photos: cfg.offline ? undefined : photoFinder() });
 serve({ fetch: app.fetch, port: cfg.port }, (info) => {
   console.log(JSON.stringify({ event: "listening", port: info.port, version: cfg.version, llm: !!llm, push: !!push, archive: !!archive }));
 });

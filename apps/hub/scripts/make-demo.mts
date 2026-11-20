@@ -34,20 +34,28 @@ const marine: Marine = { hourly: hours.filter((t) => t >= nowS - 3600).map((t, i
 const buoy: Buoy = { station: "Sydney Waverider (MHL)", lat: -33.75, lon: 151.4, latest: { t: nowS - 2 * 3600, hs: 1.45, hmax: 2.6, tp: 11.8, dir: 148 },
   series: Array.from({ length: 44 }, (_, i) => ({ t: nowS - (46 - i) * 3600, hs: 1.2 + 0.4 * Math.sin(i / 7), hmax: 2.3, tp: 11 + Math.sin(i / 9), dir: 150 })) };
 const raw: RawAc[] = [
-  { hex: "7c6b2d", flight: "QFA432", r: "VH-VZA", t: "B738", alt_baro: 2100, gs: 165, track: 338, baro_rate: -640, lat: -34.012, lon: 151.205, seen_pos: 1 },
-  { hex: "7c4920", flight: "VOZ821", r: "VH-YIA", t: "B738", alt_baro: 7800, gs: 290, track: 160, baro_rate: 1800, lat: -33.99, lon: 151.21, seen_pos: 1 },
-  { hex: "c81e2f", flight: "ANZ103", t: "B789", alt_baro: 9000, gs: 300, track: 255, baro_rate: -900, lat: -33.93, lon: 151.42, seen_pos: 1 },
-  { hex: "7c0001", flight: "QFA1", r: "VH-OQA", t: "A388", alt_baro: 5200, gs: 250, track: 95, baro_rate: 1500, lat: -33.951, lon: 151.215, seen_pos: 1 },
-  { hex: "7c81b5", flight: "RSCU201", t: "AW139", alt_baro: 900, gs: 110, track: 20, lat: -33.97, lon: 151.27, seen_pos: 2 },
-  { hex: "7c533a", flight: "JST512", t: "A321", alt_baro: 12000, gs: 320, track: 200, baro_rate: -1200, lat: -33.80, lon: 151.30, seen_pos: 1 },
+  { hex: "7c6b2d", flight: "QFA432", r: "VH-VZA", t: "B738", desc: "BOEING 737-800", ownOp: "QANTAS AIRWAYS", year: "2003", category: "A3", type: "adsb_icao", squawk: "3012", alt_baro: 2100, gs: 165, track: 338, baro_rate: -640, lat: -34.012, lon: 151.205, seen_pos: 1 },
+  { hex: "7c4920", flight: "VOZ821", r: "VH-YIA", t: "B738", desc: "BOEING 737-800", category: "A3", type: "adsb_icao", squawk: "4433", alt_baro: 7800, gs: 290, track: 160, baro_rate: 1800, lat: -33.99, lon: 151.21, seen_pos: 1 },
+  { hex: "c81e2f", flight: "ANZ103", t: "B789", desc: "BOEING 787-9 Dreamliner", category: "A5", type: "adsb_icao", squawk: "3115", alt_baro: 9000, gs: 300, track: 255, baro_rate: -900, lat: -33.93, lon: 151.42, seen_pos: 1 },
+  { hex: "7c0001", flight: "QFA1", r: "VH-OQA", t: "A388", desc: "AIRBUS A-380-800", ownOp: "QANTAS AIRWAYS", year: "2008", category: "A5", type: "adsb_icao", squawk: "3301", alt_baro: 5200, gs: 250, track: 95, baro_rate: 1500, lat: -33.951, lon: 151.215, seen_pos: 1 },
+  { hex: "7c81b5", flight: "RSCU201", t: "A139", desc: "AGUSTAWESTLAND AW-139", category: "A7", type: "mlat", squawk: "1000", alt_baro: 900, gs: 110, track: 20, lat: -33.97, lon: 151.27, seen_pos: 2 },
+  { hex: "7c533a", flight: "JST512", r: "VH-OFA", t: "A321", desc: "AIRBUS A-321neo", category: "A3", type: "adsb_icao", squawk: "7700", emergency: "general", alt_baro: 12000, gs: 320, track: 200, baro_rate: -1200, lat: -33.80, lon: 151.30, seen_pos: 1 },
+  { hex: "7c7a3e", flight: "RXA6516", r: "VH-NRX", t: "SF34", desc: "SAAB 340", category: "A2", type: "adsb_icao", squawk: "3420", alt_baro: 4300, gs: 180, track: 300, baro_rate: -700, lat: -34.05, lon: 151.33, seen_pos: 1 },
+  { hex: "7c3f11", flight: "VHSTR", r: "VH-STR", t: "C172", desc: "CESSNA 172", category: "A1", type: "adsb_icao", squawk: "1200", alt_baro: 1500, gs: 95, track: 15, lat: -34.08, lon: 151.15, seen_pos: 3 },
 ];
+const SYD = { iata: "SYD", icao: "YSSY", name: "Sydney Kingsford Smith", location: "Sydney", lat: -33.9461, lon: 151.1772 };
+const ap = (iata: string, icao: string, name: string, location: string, lat: number, lon: number) => ({ iata, icao, name, location, lat, lon });
+const MEL = ap("MEL", "YMML", "Melbourne", "Melbourne", -37.6733, 144.8433), BNE = ap("BNE", "YBBN", "Brisbane", "Brisbane", -27.3842, 153.1175);
+const DXB = ap("DXB", "OMDB", "Dubai International", "Dubai", 25.2528, 55.3644), LHR = ap("LHR", "EGLL", "Heathrow", "London", 51.47, -0.4543);
+const AKL = ap("AKL", "NZAA", "Auckland", "Auckland", -37.0082, 174.785), OOL = ap("OOL", "YBCG", "Gold Coast", "Gold Coast", -28.1644, 153.5047);
+const WGA = ap("WGA", "YSWG", "Wagga Wagga", "Wagga Wagga", -35.1653, 147.4664);
+const route = (callsign: string, list: typeof SYD[]) => [callsign, { callsign, airport_codes: list.map((a) => a.icao).join("-"), _airport_codes_iata: list.map((a) => a.iata).join("-"), plausible: true, _airports: list }] as const;
 const routes = new Map([
-  ["QFA432", { callsign: "QFA432", airport_codes: "YMML-YSSY", _airport_codes_iata: "MEL-SYD", plausible: true, _airports: [{ iata: "MEL", name: "Melbourne", location: "Melbourne" }, { iata: "SYD", name: "Sydney Kingsford Smith", location: "Sydney" }] }],
-  ["QFA1", { callsign: "QFA1", airport_codes: "YSSY-OMDB-EGLL", _airport_codes_iata: "SYD-DXB-LHR", plausible: true, _airports: [{ iata: "SYD", name: "Sydney Kingsford Smith", location: "Sydney" }, { iata: "LHR", name: "Heathrow", location: "London" }] }],
-  ["VOZ821", { callsign: "VOZ821", airport_codes: "YSSY-YBBN", _airport_codes_iata: "SYD-BNE", plausible: true, _airports: [{ iata: "SYD", name: "Sydney Kingsford Smith", location: "Sydney" }, { iata: "BNE", name: "Brisbane", location: "Brisbane" }] }],
+  route("QFA432", [MEL, SYD]), route("QFA1", [SYD, DXB, LHR]), route("VOZ821", [SYD, BNE]),
+  route("ANZ103", [AKL, SYD]), route("JST512", [OOL, SYD]), route("RXA6516", [WGA, SYD]),
 ]);
 const trails = new Map(raw.map((r) => [r.hex, Array.from({ length: 12 }, (_, i) => [r.lat! - Math.cos(((r.track ?? 0) * Math.PI) / 180) * 0.004 * (12 - i), r.lon! - Math.sin(((r.track ?? 0) * Math.PI) / 180) * 0.005 * (12 - i)] as [number, number])]));
-const aircraft = normalize(raw, routes as never, trails);
+const aircraft = normalize(raw, routes as never, trails, at.getTime());
 const flights: Flights = { aircraft, runway: runwayMode(aircraft), curfew: false, seenToday: 214 };
 const fires = parseFires(JSON.parse(readFileSync(new URL("../test/fixtures/rfs-majorincidents-2020-10-10.json", import.meta.url), "utf8")), weather.current.windDir);
 const space: SpaceWeather = { kpNow: 3.3, kpMax24h: 4, forecastMax: 5, forecastAt: new Date(at.getTime() + 9 * 3600e3).toISOString(), aurora: "none" };

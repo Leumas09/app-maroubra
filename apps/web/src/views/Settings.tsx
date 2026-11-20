@@ -8,7 +8,7 @@ const KINDS: { id: Moment["kind"]; label: string }[] = [
   { id: "iss", label: "Space Station passes" },
   { id: "aurora", label: "Aurora alerts" },
   { id: "rain", label: "Rain within the hour" },
-  { id: "plane", label: "Unusual aircraft overhead" },
+  { id: "plane", label: "Unusual aircraft overhead, emergencies nearby" },
   { id: "fire", label: "Bushfires and smoke nearby" },
 ];
 const DEFAULT: Moment["kind"][] = ["beach", "aurora", "fire", "iss", "moon", "rain"];

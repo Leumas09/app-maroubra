@@ -147,7 +147,7 @@ export function App() {
         {current === "beach" && <Beach e={beach} status={beachStatus} tide={tide} now={now} />}
         {current === "sea" && <Sea table={tide} now={now} buoy={buoy} marine={entry<Marine>(snap, "marine")} />}
         {current === "sky" && (sky ? <Sky s={sky} iss={entry<Iss>(snap, "iss")} space={entry<SpaceWeather>(snap, "space")} sunrise={entry<Sunrise>(snap, "sunrise")} /> : <div className="card" style={{ minHeight: 320 }} aria-busy="true" />)}
-        {current === "overhead" && <Overhead e={flights} />}
+        {current === "overhead" && <Overhead e={flights} night={!!night} demo={isDemo(snap)} />}
         {current === "fire" && <FireAir fires={fires} />}
         {current === "news" && <News e={news} now={now} />}
         {current === "track" && <TrackRecord />}
