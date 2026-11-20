@@ -43,7 +43,7 @@ function Map({ f, sel, pick }: { f: Flights; sel: string | null; pick: (hex: str
       <text x={sx(HOME.lon) + 12} y={sy(HOME.lat) + 4} fontSize="14" fontWeight="800" fill="var(--ink)">Maroubra</text>
       {f.aircraft.filter((a) => !a.onGround).map((a) => {
         const on = a.hex === sel;
-        const color = on ? "var(--alert)" : a.interesting ? "#e0a100" : "var(--ink)";
+        const color = on ? "var(--alert)" : a.interesting ? "var(--sun)" : "var(--ink)";
         return (
           <g key={a.hex} onClick={() => pick(a.hex)} style={{ cursor: "pointer" }}>
             {a.trail.length > 1 && <path d={a.trail.map(([la, lo], i) => `${i ? "L" : "M"}${sx(lo)},${sy(la)}`).join(" ")} fill="none" stroke={color} strokeOpacity="0.4" strokeWidth="2" />}

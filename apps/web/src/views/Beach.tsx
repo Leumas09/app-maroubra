@@ -9,7 +9,7 @@ function ScoreBars({ b, now }: { b: B; now: Date }) {
   if (!hrs.length) return null;
   const W = 1000, H = 170, P = 24;
   const bw = (W - 2 * P) / hrs.length;
-  const color = (s: number) => (s >= 8 ? "var(--good)" : s >= 6.5 ? "var(--accent)" : s >= 5 ? "#e0a100" : "var(--alert)");
+  const color = (s: number) => (s >= 8 ? "var(--good)" : s >= 6.5 ? "var(--accent)" : s >= 5 ? "var(--sun)" : "var(--alert)");
   let lastDay = "";
   return (
     <svg className="chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Swim score hour by hour, daylight only">

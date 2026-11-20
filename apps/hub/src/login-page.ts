@@ -12,14 +12,14 @@ export function loginPage(opts: { error?: string; next?: string } = {}): string 
 <title>Maroubra</title>
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <style>
-:root{--bg:#eef3f5;--ink:#0e2a3b;--muted:#4f6878;--card:#fff;--accent:#0b6e99;--err:#9a2d0e;color-scheme:light}
-@media (prefers-color-scheme:dark){:root{--bg:#0b1016;--ink:#e6edf3;--muted:#8b98a8;--card:#121a23;--accent:#4cc9f0;--err:#ff8a7a;color-scheme:dark}}
+:root{--bg:#fbf9f4;--ink:#1b1916;--muted:#625d55;--card:#f3f0ea;--accent:#145f5c;--on-accent:#fbf9f4;--err:#9a2d0e;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#070b13;--ink:#ece8e0;--muted:#a3abbb;--card:#0e131c;--accent:#eab977;--on-accent:#2a1c0c;--err:#ff8a7a;color-scheme:dark}}
 *{box-sizing:border-box}body{margin:0;min-height:100dvh;display:grid;place-items:center;background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,sans-serif;padding:16px}
-form{background:var(--card);border-radius:24px;padding:28px;width:100%;max-width:380px;display:grid;gap:16px}
-h1{margin:0;font-size:28px;letter-spacing:-.5px}p{margin:0;color:var(--muted)}
+form{background:var(--card);border-radius:20px;padding:28px;width:100%;max-width:380px;display:grid;gap:16px}
+h1{margin:0;font-size:28px;font-weight:500;letter-spacing:-.5px}p{margin:0;color:var(--muted)}
 label{font-weight:600;font-size:14px}input[type=password]{width:100%;font:inherit;padding:14px;border-radius:14px;border:1.5px solid var(--muted);background:transparent;color:inherit;margin-top:6px}
 .row{display:flex;gap:10px;align-items:center;min-height:44px}.row input{width:22px;height:22px}
-button{font:inherit;font-weight:700;padding:14px;border:0;border-radius:14px;background:var(--accent);color:#fff;min-height:48px;cursor:pointer}
+button{font:inherit;font-weight:600;padding:14px;border:0;border-radius:999px;background:var(--accent);color:var(--on-accent);min-height:48px;cursor:pointer}
 .err{color:var(--err);font-weight:600}:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 </style>
 </head>

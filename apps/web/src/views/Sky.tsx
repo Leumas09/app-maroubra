@@ -5,7 +5,7 @@ import { auroraText } from "./FireAir";
 import { compass, duration, pct, shortDate, time } from "../lib/format";
 import type { SkyModel } from "../lib/sky-model";
 
-function lede(s: SkyModel): string {
+export function skyLede(s: SkyModel): string {
   const parts: string[] = [];
   if (!s.isNight && s.sun.set) parts.push(`Sunset ${time(s.sun.set)}`);
   const dark = s.dark[0];
@@ -27,10 +27,10 @@ export function Sky({ s, iss, space, sunrise }: { s: SkyModel; iss?: E<Iss>; spa
     <section aria-labelledby="sky-title" className="layout-main" style={{ display: "grid", gap: 16 }}>
       <div className="card">
         <h1 id="sky-title" style={{ margin: "0 0 8px", fontSize: 15, color: "var(--muted)" }}>{s.isNight ? "Tonight over Maroubra" : "The sky over Maroubra"}</h1>
-        <p className="lede">{lede(s)}</p>
+        <p className="lede">{skyLede(s)}</p>
       </div>
       <div className="card chart-scroll" style={{ padding: 12 }}>
-        <HorizonChart sun={s.tracks.sun} moon={s.tracks.moon} planets={s.tracks.planets} summary={lede(s)} />
+        <HorizonChart sun={s.tracks.sun} moon={s.tracks.moon} planets={s.tracks.planets} summary={skyLede(s)} />
       </div>
       <div className="grid">
         <div className="card">

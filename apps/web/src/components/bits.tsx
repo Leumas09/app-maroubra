@@ -23,11 +23,11 @@ export function Empty({ children }: { children: ReactNode }) {
 
 /** Icône météo d'après le code WMO, en traits simples (pas d'emoji). */
 export function WxIcon({ code, size = 28, night = false }: { code: number; size?: number; night?: boolean }) {
-  const sun = <g stroke="#e0a100" strokeWidth="2" fill="none" strokeLinecap="round"><circle cx="9" cy="9" r="3.5" /><path d="M9 2v1.5M2 9h1.5M4 4l1 1M14 4l-1 1M16 9h-1.5" /></g>;
+  const sun = <g stroke="var(--sun)" strokeWidth="2" fill="none" strokeLinecap="round"><circle cx="9" cy="9" r="3.5" /><path d="M9 2v1.5M2 9h1.5M4 4l1 1M14 4l-1 1M16 9h-1.5" /></g>;
   const moon = <path d="M11 3a6 6 0 1 0 6 8 5 5 0 0 1-6-8z" fill="none" stroke="currentColor" strokeWidth="1.8" />;
   const cloud = <path d="M8 20h10a3.5 3.5 0 0 0 0-7 5 5 0 0 0-9.6 1.6A2.7 2.7 0 0 0 8 20z" fill="var(--card)" stroke="currentColor" strokeWidth="1.8" />;
   const rain = <path d="M10 21.5l-1 2M14 21.5l-1 2M18 21.5l-1 2" stroke="var(--accent)" strokeWidth="1.8" strokeLinecap="round" />;
-  const bolt = <path d="M13 19l-2 3h3l-2 3" stroke="#e0a100" strokeWidth="1.8" fill="none" />;
+  const bolt = <path d="M13 19l-2 3h3l-2 3" stroke="var(--sun)" strokeWidth="1.8" fill="none" />;
   const fog = <path d="M4 15h16M6 18h14M4 21h12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />;
   const parts =
     code === 0 || code === 1 ? [night ? moon : sun]

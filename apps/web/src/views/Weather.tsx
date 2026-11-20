@@ -18,7 +18,7 @@ function HourChart({ w }: { w: W }) {
       {hrs.map((h, i) => h.precip > 0 && (
         <rect key={`r${h.t}`} x={x(i) - 12} width="24" y={H - 26 - (h.precip / maxP) * 50} height={(h.precip / maxP) * 50} rx="4" fill="var(--accent)" opacity="0.55" />
       ))}
-      <path d={hrs.map((h, i) => `${i ? "L" : "M"}${x(i)},${y(h.temp)}`).join(" ")} fill="none" stroke="#e0a100" strokeWidth="3" />
+      <path d={hrs.map((h, i) => `${i ? "L" : "M"}${x(i)},${y(h.temp)}`).join(" ")} fill="none" stroke="var(--sun)" strokeWidth="3" />
       {hrs.map((h, i) => i % 3 === 0 && (
         <g key={h.t}>
           <text x={x(i)} y={y(h.temp) - 10} textAnchor="middle" fontSize="15" fontWeight="700" fill="var(--ink)">{Math.round(h.temp)}°</text>

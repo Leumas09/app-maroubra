@@ -64,13 +64,13 @@ export function HorizonChart({ sun, moon, planets, summary }: Props) {
       {labels.map((l, i) => (
         <text key={i} x={Math.min(W - 10, Math.max(10, (i / 8) * W))} y={H - 4} textAnchor="middle" fontSize="13" fontWeight="700" fill="var(--muted)">{l}</text>
       ))}
-      {paths(sun).map((d, i) => <path key={`s${i}`} d={d} fill="none" stroke="#e0a100" strokeWidth="3" strokeLinecap="round" />)}
+      {paths(sun).map((d, i) => <path key={`s${i}`} d={d} fill="none" stroke="var(--sun)" strokeWidth="3" strokeLinecap="round" />)}
       {paths(moon).map((d, i) => <path key={`m${i}`} d={d} fill="none" stroke="var(--ink)" strokeOpacity="0.55" strokeWidth="2.5" strokeDasharray="1 6" strokeLinecap="round" />)}
       {Object.entries(planets).map(([name, pts]) => paths(pts).map((d, i) => (
         <path key={`${name}${i}`} d={d} fill="none" stroke="var(--accent)" strokeOpacity="0.5" strokeWidth="1.5" />
       )))}
       {[
-        { p: now(sun), label: "Sun", fill: "#e0a100", r: 9 },
+        { p: now(sun), label: "Sun", fill: "var(--sun)", r: 9 },
         { p: now(moon), label: "Moon", fill: "var(--ink)", r: 8 },
         ...Object.entries(planets).map(([name, pts]) => ({ p: now(pts), label: name, fill: "var(--accent)", r: 5 })),
       ]
