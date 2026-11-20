@@ -542,3 +542,16 @@ Premier lot choisi par Samuel dans la liste des fonctionnalités de Flightradar2
 - que Planespotters accepte les appels du hub et l'affichage de ses miniatures sans en-tête Referer ;
 - le Sky finder sur un iPhone et un Android, dehors : alignement des étiquettes sur les avions réels, avant et après réglage par glissement ;
 - la consommation de tuiles : CARTO est gratuit jusqu'à 75 000 affichages par mois pour un usage non commercial, largement au-dessus d'un usage familial.
+
+## Partie K : source des positions d'avions (20 novembre 2026)
+
+Constat en production après la mise en ligne de la partie J : `/health` affichait `429 Too Many Requests for api.adsb.lol`. adsb.lol limite désormais l'accès sans clé à 500 appels par jour (`x-ratelimit-limit: 500;w=86400`), alors que le hub l'appelait toutes les 10 s (environ 8 600 fois par jour).
+
+| Point | Choix | Preuve |
+|---|---|---|
+| Positions | adsb.fi open data (`opendata.adsb.fi/api/v2/lat/…/lon/…/dist/25`), une requête par seconde autorisée, sans clé, usage non commercial ; même format readsb (liste sous `aircraft`) | Réponse réelle du 20/11/2026 conservée en jeu de test `adsbfi-point-2026-11-20.json` |
+| Secours | adsb.lol si adsb.fi tombe, au plus toutes les 5 min | Test de bascule |
+| Routes | `routeset` d'adsb.lol au plus toutes les 10 min ; au pire 432 appels par jour avec le secours | Test ; le 20/11 à 23 h 36 UTC, `routeset` répondait `201` sans contenu : routes à surveiller |
+| Écartée | airplanes.live : refuse l'accès sans accord préalable (« Please contact us at contact@airplanes.live ») | Réponse 403 du 20/11/2026 |
+
+À terme, l'antenne maison (partie sur les sources) donnerait une clé adsb.lol et des positions vraiment locales.

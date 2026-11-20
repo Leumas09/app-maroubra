@@ -1,5 +1,7 @@
-// Avions autour de Maroubra : positions ADS-B d'adsb.lol (API v2, sans clé) et routes de son
-// service « routeset ». On déduit le mode de pistes de Sydney, le couvre-feu et les survols imminents.
+// Avions autour de Maroubra : positions ADS-B d'adsb.fi (open data, une requête par seconde autorisée),
+// adsb.lol en secours, et routes du service « routeset » d'adsb.lol. adsb.lol limite l'accès sans clé
+// à 500 appels par jour : secours au plus toutes les 5 min, routes au plus toutes les 10 min (432 par jour au pire).
+// On déduit le mode de pistes de Sydney, le couvre-feu et les survols imminents.
 import type { Aircraft, Airport, Flights } from "@maroubra/core";
 import { airlineOf } from "./airlines";
 import { SITE } from "../config";
@@ -9,7 +11,13 @@ import type { Collector } from "../collector";
 
 const YSSY = { lat: -33.9461, lon: 151.1772 };
 const RADIUS_NM = 25;
-const ROUTES_EVERY_MS = 30 * 60e3;
+const ROUTES_EVERY_MS = 10 * 60e3;
+const FALLBACK_EVERY_MS = 5 * 60e3;
+const ADSB_FI = `https://opendata.adsb.fi/api/v2/lat/${SITE.lat}/lon/${SITE.lon}/dist/${RADIUS_NM}`;
+const ADSB_LOL = `https://api.adsb.lol/v2/point/${SITE.lat}/${SITE.lon}/${RADIUS_NM}`;
+
+/** Les deux agrégateurs servent le format readsb : liste sous « aircraft » (adsb.fi) ou « ac » (adsb.lol). */
+export const aircraftList = (j: { ac?: RawAc[]; aircraft?: RawAc[] }): RawAc[] => j.aircraft ?? j.ac ?? [];
 
 /** Types rares à Sydney, pour l'alerte « avion remarquable ». */
 const RARE: Record<string, string> = {
@@ -143,15 +151,22 @@ export function flightsCollector(): Collector<Flights> {
   const trails = new Map<string, [number, number][]>();
   const seen = new Map<string, string>(); // hex vu aujourd'hui (jour de Sydney)
   let lastRoutes = 0;
+  let lastFallback = 0;
   return {
     id: "flights",
-    // adsb.lol limite l'accès sans clé à 500 appels par jour : un relevé toutes les 200 s (432 par jour),
-    // et les routes au plus une fois par demi-heure (48 par jour). Solution d'attente avant adsb.fi.
-    everyMs: 200_000,
-    staleAfterMs: 10 * 60e3,
+    everyMs: 10_000,
+    staleAfterMs: 2 * 60e3,
     run: async ({ now }) => {
-      const j = await fetchJson<{ ac?: RawAc[] }>(`https://api.adsb.lol/v2/point/${SITE.lat}/${SITE.lon}/${RADIUS_NM}`);
-      const raw = j.ac ?? [];
+      let raw: RawAc[];
+      let source = "adsb.fi";
+      try {
+        raw = aircraftList(await fetchJson(ADSB_FI));
+      } catch (err) {
+        if (now.getTime() - lastFallback < FALLBACK_EVERY_MS) throw err;
+        lastFallback = now.getTime();
+        raw = aircraftList(await fetchJson(ADSB_LOL));
+        source = "adsb.lol";
+      }
       // Traces des 10 dernières minutes (1 point par passage)
       for (const r of raw) {
         if (r.lat == null || r.lon == null) continue;
@@ -176,7 +191,7 @@ export function flightsCollector(): Collector<Flights> {
       for (const [hex, d] of seen) if (d !== day) seen.delete(hex);
       const aircraft = normalize(raw, routes, trails, now.getTime());
       for (const a of aircraft) if (a.distKm <= 10 && !a.onGround) seen.set(a.hex, day);
-      return { aircraft, runway: runwayMode(aircraft), curfew: isCurfew(now), seenToday: seen.size };
+      return { aircraft, runway: runwayMode(aircraft), curfew: isCurfew(now), seenToday: seen.size, source };
     },
   };
 }

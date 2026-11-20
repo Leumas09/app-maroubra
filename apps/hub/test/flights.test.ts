@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { describe, expect, it, vi } from "vitest";
 import { moments } from "../src/derive/moments";
 import { okPhotoUrl, parsePhoto, photoFinder } from "../src/photos";
 import { airlineOf } from "../src/sources/airlines";
-import { currentLeg, emergencyOf, normalize, type RawAc } from "../src/sources/flights";
+import { aircraftList, currentLeg, emergencyOf, flightsCollector, normalize, type RawAc } from "../src/sources/flights";
 import type { Config } from "../src/config";
 import { createApp } from "../src/server";
 import { Store } from "../src/store";
@@ -104,5 +105,43 @@ describe("route /api/aircraft/:hex/photo", () => {
     const csp = (await createApp(cfg, new Store()).request("/health")).headers.get("content-security-policy")!;
     expect(csp).toContain("img-src 'self' data: blob: https://www.randwick.nsw.gov.au https://*.basemaps.cartocdn.com https://server.arcgisonline.com https://*.plnspttrs.net");
     expect(csp).toContain("connect-src 'self';");
+  });
+});
+
+describe("source des positions : adsb.fi, adsb.lol en secours", () => {
+  const fi = JSON.parse(readFileSync(new URL("./fixtures/adsbfi-point-2026-11-20.json", import.meta.url), "utf8"));
+  it("lit une vraie réponse d'adsb.fi (liste sous « aircraft »)", () => {
+    const acs = normalize(aircraftList(fi), new Map(), new Map(), fi.now);
+    expect(acs).toHaveLength(6);
+    const va = acs.find((a) => a.callsign === "VOZ829")!;
+    expect(va).toMatchObject({ type: "B38M", flightNo: "VA829", source: "ADS-B", airline: { name: "Virgin Australia" } });
+    expect(acs.find((a) => a.type === "R22")!.source).toBe("MLAT");
+    expect(aircraftList({ ac: [] })).toEqual([]);
+  });
+
+  it("bascule sur adsb.lol si adsb.fi tombe, au plus une fois toutes les 5 min", async () => {
+    const calls: string[] = [];
+    let fiUp = false;
+    vi.stubGlobal("fetch", async (u: string) => {
+      calls.push(new URL(u).host);
+      if (u.includes("adsb.fi") && !fiUp) return new Response("down", { status: 503 });
+      if (u.includes("routeset")) return new Response("[]");
+      return new Response(JSON.stringify(u.includes("adsb.fi") ? fi : { ac: fi.aircraft }));
+    });
+    try {
+      const col = flightsCollector();
+      const t0 = new Date("2026-11-20T23:00:00Z");
+      expect((await col.run({ now: t0 } as never)).source).toBe("adsb.lol");
+      await expect(col.run({ now: new Date(t0.getTime() + 10e3) } as never)).rejects.toThrow(/503/);
+      expect((await col.run({ now: new Date(t0.getTime() + 301e3) } as never)).source).toBe("adsb.lol");
+      fiUp = true;
+      const ok = await col.run({ now: new Date(t0.getTime() + 311e3) } as never);
+      expect(ok.source).toBe("adsb.fi");
+      expect(ok.aircraft).toHaveLength(6);
+      // routes : un seul appel en 311 s (au plus toutes les 10 min)
+      expect(calls.filter((h) => h === "api.adsb.lol").length).toBe(3); // 2 secours + 1 routeset
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
