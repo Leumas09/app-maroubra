@@ -174,7 +174,7 @@ export function Overhead({ e, night, demo }: { e: E<Flights>; night: boolean; de
           </div>
         </div>
         <FlightMap aircraft={f.aircraft} motion={motion} selected={s?.hex ?? null} follow={follow} base={base} night={night} calm={calm}
-          onPick={pick} onStopFollow={() => setFollow(false)} homeTick={homeTick} />
+          onPick={pick} onStopFollow={() => setFollow(false)} homeTick={homeTick} source={f.source ?? "adsb.lol"} />
       </div>
       <div className="grid">
         {s && <Selected a={s} follow={follow} setFollow={setFollow} openSky={() => { setSel(s.hex); openSky(); }} />}

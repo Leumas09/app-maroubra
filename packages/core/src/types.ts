@@ -154,6 +154,8 @@ export interface Flights {
   runway: { mode: string; confidence: "high" | "low" } | null;
   curfew: boolean;
   seenToday: number;
+  /** Agrégateur qui a fourni les positions (adsb.fi, ou adsb.lol en secours). */
+  source?: string;
 }
 
 export interface Fire {

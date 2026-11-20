@@ -56,7 +56,7 @@ const routes = new Map([
 ]);
 const trails = new Map(raw.map((r) => [r.hex, Array.from({ length: 12 }, (_, i) => [r.lat! - Math.cos(((r.track ?? 0) * Math.PI) / 180) * 0.004 * (12 - i), r.lon! - Math.sin(((r.track ?? 0) * Math.PI) / 180) * 0.005 * (12 - i)] as [number, number])]));
 const aircraft = normalize(raw, routes as never, trails, at.getTime());
-const flights: Flights = { aircraft, runway: runwayMode(aircraft), curfew: false, seenToday: 214 };
+const flights: Flights = { aircraft, runway: runwayMode(aircraft), curfew: false, seenToday: 214, source: "adsb.fi" };
 const fires = parseFires(JSON.parse(readFileSync(new URL("../test/fixtures/rfs-majorincidents-2020-10-10.json", import.meta.url), "utf8")), weather.current.windDir);
 const space: SpaceWeather = { kpNow: 3.3, kpMax24h: 4, forecastMax: 5, forecastAt: new Date(at.getTime() + 9 * 3600e3).toISOString(), aurora: "none" };
 const iss: Iss = { tleEpoch: at.toISOString(), passes: [

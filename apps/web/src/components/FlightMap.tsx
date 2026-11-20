@@ -46,6 +46,8 @@ interface Props {
   calm: boolean;
   /** Change à chaque demande de retour sur la maison. */
   homeTick: number;
+  /** Agrégateur des positions, crédité sur la carte. */
+  source: string;
 }
 
 export function FlightMap(p: Props) {
@@ -61,7 +63,6 @@ export function FlightMap(p: Props) {
     const m = L.map(box.current!, { zoomControl: true, attributionControl: true, zoomAnimation: false, zoomSnap: 0.5, minZoom: 7, maxZoom: 17, worldCopyJump: false });
     m.fitBounds(L.latLng(HOME).toBounds(2 * VIEW_RADIUS_M));
     m.attributionControl.setPrefix(false);
-    m.attributionControl.addAttribution("Positions: adsb.lol");
     // Trait de côte local, toujours là (hors ligne, et sous les tuiles pendant leur chargement).
     L.geoJSON(land.geometry as never, { interactive: false, attribution: "Coastline © OpenStreetMap contributors", style: { stroke: true, color: "var(--rule)", weight: 1, fillColor: "var(--land)", fillOpacity: 1 } }).addTo(m);
     for (const km of [5, 10, 20]) L.circle(HOME, { radius: km * 1000, interactive: false, color: "var(--accent)", opacity: 0.45, weight: 1, dashArray: "4 6", fill: false }).addTo(m);
@@ -99,6 +100,12 @@ export function FlightMap(p: Props) {
     }
     box.current!.dataset.base = p.base;
   }, [p.base, p.night]);
+
+  useEffect(() => {
+    const a = map.current!.attributionControl, text = `Positions: ${p.source}`;
+    a.addAttribution(text);
+    return () => { a.removeAttribution(text); };
+  }, [p.source]);
 
   useEffect(() => { if (p.homeTick) map.current?.fitBounds(L.latLng(HOME).toBounds(2 * VIEW_RADIUS_M)); }, [p.homeTick]);
 
