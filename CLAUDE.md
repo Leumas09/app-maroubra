@@ -25,5 +25,9 @@ Commandes : `npm test` (tous les tests), `apps/hub/scripts/demo.sh start` (hubs 
 - Tag `project=maroubra` sur chaque ressource, dans `rg-app-maroubra`. Ne jamais modifier le socle `rg-kiwi-apps`.
 - Chaque prévision affichée a un juge extérieur (observation, référence indépendante) ; un objectif manqué reste visible dans le Track record.
 - Interface en anglais ; documentation et code commentés en français, sans tiret cadratin.
-- Pull requests : en ouvrir une en autonomie dès qu'un lot de travail est terminé, testé et poussé, sans attendre que Samuel la demande. La fusion reste à Samuel.
-- Suivi des PR : s'abonner d'office à chaque PR ouverte (checks, relectures, commentaires) et corriger en autonomie ce qui en ressort, jusqu'à ce qu'elle soit fusionnée ou fermée.
+- Autonomie jusqu'à la production : Samuel donne les fonctionnalités, Claude fait tout le reste sans attendre de feu vert, du code à la mise en production.
+  - Pull request : ouverte dès qu'un lot est terminé, testé et poussé.
+  - Suivi : abonnement d'office à chaque PR ouverte (checks, relectures, commentaires) et correction de ce qui en ressort.
+  - Fusion : dès que la CI est verte et qu'il n'y a ni conflit ni relecture bloquante, fusion dans `main` (commit de fusion).
+  - Mise en production : la fusion déclenche le workflow `deploy` ; suivre le run jusqu'au bout, vérifier la version servie, corriger et refusionner si le déploiement échoue.
+  - Seule exception : un changement d'infra (Bicep) garde la règle du what-if, du résumé en français et de l'OK de Samuel avant d'appliquer.
