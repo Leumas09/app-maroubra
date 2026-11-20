@@ -24,6 +24,8 @@
   --sky-top: oklch(84% 0.045 205);
   --sky-bottom: oklch(95% 0.02 195);
   --slot: oklch(86% 0.012 82);
+  --sand: oklch(91% 0.045 85);
+  --sea-ink: oklch(55% 0.09 225);
   --slot-shade: oklch(20% 0.01 80 / 0.35);
   --edge-light: inset 0 1px 0 oklch(100% 0 0 / 0.5);
   --shadow-panel: 0 1px 0 oklch(20% 0.01 80 / 0.2), 0 24px 48px -16px oklch(20% 0.02 80 / 0.3);
@@ -59,6 +61,8 @@
   --sky-top: oklch(9% 0.02 258);
   --sky-bottom: oklch(20% 0.035 245);
   --slot: oklch(9% 0.015 258);
+  --sand: oklch(30% 0.03 80);
+  --sea-ink: oklch(70% 0.09 225);
   --slot-shade: oklch(0% 0 0 / 0.7);
   --edge-light: inset 0 1px 0 oklch(100% 0 0 / 0.06);
   --shadow-panel: 0 1px 0 oklch(0% 0 0 / 0.4), 0 24px 48px -16px oklch(0% 0 0 / 0.6);
@@ -243,6 +247,86 @@ th { color: var(--muted); font-weight: 500; }
 
 /* Écran ambiant la nuit : luminosité réduite pour ne pas éclairer la pièce */
 :root[data-ambient="dim"] body { filter: brightness(0.62); }
+
+/* Plage : statut officiel, cadran, ruban horaire, instruments, webcams */
+.beach { display: grid; gap: 22px; }
+.status-band { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 18px; padding: 20px 22px; border-radius: var(--radius); background: linear-gradient(var(--paper-2), var(--paper-3)); box-shadow: var(--edge-light), var(--shadow-panel); border-left: 6px solid var(--muted); }
+.status-band.open { border-left-color: var(--good); }
+.status-band.closed { border-left-color: var(--alert); background: linear-gradient(var(--warn-bg), var(--paper-3)); }
+.status-kicker { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; font-size: 14px; color: var(--muted); font-weight: 500; }
+.status-word { margin: 4px 0 0; font-family: var(--display); font-size: clamp(30px, 3.4vw, 44px); line-height: 1.05; letter-spacing: -0.03em; }
+.status-band.open .status-word { color: var(--good); }
+.status-band.closed .status-word { color: var(--miss-ink); }
+.status-sub { margin: 8px 0 0; font-size: 16px; color: var(--ink-2); line-height: 1.45; }
+.status-quote { margin: 10px 0 0; font-size: 16px; line-height: 1.45; color: var(--ink); font-style: italic; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.chip { display: inline-flex; gap: 6px; align-items: baseline; padding: 5px 12px; border-radius: 999px; font-size: 14px; font-weight: 500; background: var(--paper); box-shadow: inset 0 0 0 1px var(--rule); }
+.chip-k { color: var(--muted); font-weight: 400; }
+.chip.bad { background: var(--warn-bg); color: var(--miss-ink); box-shadow: none; }
+.chip.ok { background: var(--good-bg); color: var(--good); box-shadow: none; }
+.beach-hero { display: grid; grid-template-columns: minmax(240px, 300px) minmax(0, 1fr); gap: 32px; align-items: center; }
+.hero-dial { position: relative; display: grid; justify-items: center; }
+.dial { width: 100%; max-width: 300px; height: auto; display: block; }
+.dial-read { margin-top: -18px; display: flex; gap: 10px; align-items: baseline; }
+.dial-num { font-family: var(--display); font-size: 64px; line-height: 1; letter-spacing: -0.045em; }
+.dial-label { font-family: var(--display); font-size: 26px; letter-spacing: -0.02em; }
+.dial-cap { font-size: 13px; color: var(--muted); margin-top: 6px; display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.best { margin-top: 14px; }
+.best-when { margin: 0; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-family: var(--display); font-size: 24px; letter-spacing: -0.02em; }
+.best-k { font-family: var(--body); font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
+.best-score { font-family: var(--body); font-size: 15px; font-weight: 700; color: var(--paper); padding: 3px 10px; border-radius: 999px; }
+.because { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 2px; }
+.because li { position: relative; padding: 6px 0 6px 26px; line-height: 1.4; font-size: 16px; }
+.because li::before { position: absolute; left: 0; top: 6px; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 700; }
+.because li.plus::before { content: "✓"; background: var(--good-bg); color: var(--good); }
+.because li.minus::before { content: "−"; background: var(--warn-bg); color: var(--miss-ink); }
+.ribbon { min-width: 0; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12px; color: var(--muted); padding: 6px 4px 2px 92px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.instruments { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.instrument { padding: 16px 16px 14px; border-radius: var(--radius); background: linear-gradient(var(--paper-2), var(--paper-3)); box-shadow: var(--edge-light), var(--shadow-panel); display: flex; flex-direction: column; align-items: center; text-align: center; min-width: 0; }
+.instrument h2 { margin: 0 0 6px; font-size: 15px; font-weight: 500; color: var(--muted); align-self: flex-start; }
+.compass { width: 100%; max-width: 180px; height: auto; }
+.inst-value { margin: 6px 0 0; font-weight: 600; font-size: 16px; }
+.inst-big { margin: 10px 0 8px; font-family: var(--display); font-size: 56px; line-height: 1; letter-spacing: -0.045em; }
+.inst-sub { margin: 8px 0 0; font-size: 13px; color: var(--muted); line-height: 1.45; }
+.scale { width: 100%; max-width: 280px; height: auto; margin-top: 8px; }
+.factors ul { list-style: none; margin: 0; padding: 0; }
+.factors li { display: grid; grid-template-columns: 18px minmax(0, 1fr) 80px 34px; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--rule); }
+.f-sign { font-weight: 700; }
+.factors li.plus .f-sign { color: var(--good); }
+.factors li.minus .f-sign { color: var(--miss-ink); }
+.factors li.info .f-sign { color: var(--accent); }
+.f-text { line-height: 1.35; }
+.f-bar { height: 8px; border-radius: 4px; background: var(--slot); box-shadow: inset 0 1px 2px var(--slot-shade); overflow: hidden; }
+.f-bar.none { background: none; box-shadow: none; }
+.f-bar span { display: block; height: 100%; border-radius: 4px; background: var(--alert); }
+.f-pts { font-size: 13px; color: var(--miss-ink); text-align: right; font-weight: 600; }
+.f-sum { margin: 0; padding-top: 10px; border-top: 1px solid var(--rule); text-align: right; color: var(--muted); }
+.f-sum strong { color: var(--ink); font-size: 18px; }
+.cams { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.cam { display: block; color: var(--ink); text-decoration: none; }
+.cam-view { position: relative; aspect-ratio: 16 / 9; border-radius: 14px; overflow: hidden; background: var(--paper-3); box-shadow: var(--edge-light), var(--shadow-panel); }
+.cam-view img, .cam-view svg { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cam-live { position: absolute; left: 10px; bottom: 10px; display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 999px; font-size: 13px; font-weight: 600; background: oklch(15% 0.01 80 / 0.72); color: oklch(98% 0 0); }
+.cam-live .dot { width: 8px; height: 8px; border-radius: 50%; background: oklch(62% 0.22 28); }
+.cam:hover .cam-live { background: var(--accent); color: var(--accent-ink); }
+.cam-name { margin-top: 8px; font-weight: 600; }
+.cam-where { font-size: 13px; color: var(--muted); }
+@media (max-width: 1199px) { .instruments { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 699px) {
+  .beach-hero { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .status-band { grid-template-columns: minmax(0, 1fr); padding: 16px; gap: 8px; }
+  .status-band > svg { display: none; }
+  .instruments { gap: 10px; }
+  .instrument { padding: 12px 10px; }
+  .inst-big { font-size: 38px; margin: 6px 0; }
+  .inst-value { font-size: 14px; }
+  .inst-sub { font-size: 12px; }
+  .factors li { grid-template-columns: 18px minmax(0, 1fr) 50px 30px; }
+  .legend { padding-left: 4px; }
+}
+@media (max-width: 479px) { .cams { grid-template-columns: minmax(0, 1fr); } }
 
 /* Tablette en portrait et téléphone : le rail devient un bandeau */
 @media (max-width: 899px) {

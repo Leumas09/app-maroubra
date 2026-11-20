@@ -486,7 +486,41 @@ Développé d'un seul tenant, sans phases imposées. Tout est testé localement 
 - `main` n'est pas protégée : aucune relecture ni aucun check n'est imposé avant fusion.
 - Dans le dépôt du socle, `docs/droits.md` décrit encore une condition à 6 rôles.
 
-## Partie I : Overhead au niveau d'un radar de vols (20 novembre 2026)
+## Partie I : refonte de la page Beach (20 novembre 2026)
+
+Demande de Samuel : une page Beach plus belle, qui explique le meilleur créneau, avec les webcams et le statut officiel de la plage.
+
+### I.1 Ce qui change
+
+| Élément | Avant | Après |
+|---|---|---|
+| Statut officiel | Un lien vers Beachsafe | Bandeau en tête : ouverte ou fermée et raison, rapport du matin des sauveteurs de Randwick (baïnes, physalies, vagues, citation), horaires de surveillance et note de danger Beachsafe, prévision de pollution Beachwatch. Le lien Beach du rail passe en alerte si la plage est fermée |
+| Score | Un nombre | Cadran 0 à 10, repère du meilleur créneau, barres des points retirés par facteur (10 − pertes = score) |
+| Meilleur créneau | « Best window 17:00 to 19:00 » | La même chose, plus le pourquoi : facteur par facteur, contraste avec l'heure où ce facteur est le pire (« Offshore W wind 8 km/h; onshore ENE 28 km/h at 11:00 »), et ce qui reste à surveiller |
+| Graphique | Barres de score | Ruban horaire sur aujourd'hui et demain : courbe du score, flèches de vent colorées (de terre, parallèle, de mer), houle, marée calculée, UV, créneau en surbrillance |
+| Instruments | Tableau clé-valeur | Rose du vent et rose de la houle posées sur la plage (mer à l'est, terre à l'ouest), échelle de température de l'eau, échelle UV avec pic et heures de protection |
+| Webcams | Aucune | Cartes « Maroubra » et « Maroubra South » vers les caméras en direct de Randwick City Council, avec la photo du matin des sauveteurs quand elle existe |
+
+### I.2 Sources ajoutées (collecteur `beachStatus`, toutes les 15 min)
+
+| Source | Adresse | Statut |
+|---|---|---|
+| Rapports des sauveteurs, Randwick City Council | `https://www.randwick.nsw.gov.au/integration/feeds/lifeguard-reports` (RSS, un item par plage, publié vers 7 h) | Parseur testé sur une capture réelle du 09/11/2026 (projet public `lukewjudd/beach-bot`). Le site est derrière Cloudflare : à confirmer depuis Azure |
+| NSW Beachwatch | `https://api.beachwatch.nsw.gov.au/public/sites/geojson?site_name=Maroubra%20Beach` (CC BY 4.0) | Format documenté par l'API officielle |
+| Beachsafe (SLSA) | `https://beachsafe.org.au/api/v4/beach/maroubra` (non documentée) | Au mieux : horaires de surveillance et note de danger |
+
+Effets sur le score : une fermeture du jour par les sauveteurs met le score à 0 pour ce jour ; la prévision Beachwatch (« Likely » −4, « Possible » −1,5) remplace la règle « pluie de plus de 10 mm en 24 h » quand elle existe.
+
+La politique de sécurité du site autorise les images de `www.randwick.nsw.gov.au` (photo du matin), et seulement cet hôte.
+
+### I.3 Limites connues
+
+- Aucune de ces trois sources n'a pu être appelée depuis l'environnement de développement (réseau restreint) : la première vraie réponse se verra en production, dans « Official status ». Une source en panne affiche « Official status unavailable » sans toucher au reste.
+- Les sauveteurs publient le matin ; une fermeture en cours de journée (requin) peut ne pas apparaître.
+- Les flux vidéo des caméras ne sont pas intégrés dans la page : ni l'adresse du flux ni le droit de l'intégrer ne sont vérifiés. Les cartes ouvrent la page des caméras de la mairie.
+- Pas de flux public SharkSmart : les fermetures pour requin passent par le rapport des sauveteurs.
+
+## Partie J : Overhead au niveau d'un radar de vols (20 novembre 2026)
 
 Premier lot choisi par Samuel dans la liste des fonctionnalités de Flightradar24 (n° 1, 2, 3, 4, 9, 17, 18, 19, 21, 23, 48, 50).
 

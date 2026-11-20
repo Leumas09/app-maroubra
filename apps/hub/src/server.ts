@@ -16,8 +16,8 @@ import type { Store } from "./store";
 export const SSE_MAX_MS = 200_000;
 const SSE_HEARTBEAT_MS = 15_000;
 
-/** Hôtes d'images externes : fonds de carte (CARTO, Esri) et photos d'avions (Planespotters). */
-const IMG_HOSTS = "https://*.basemaps.cartocdn.com https://server.arcgisonline.com https://*.plnspttrs.net https://*.planespotters.net";
+/** Hôtes d'images externes : webcams de la mairie de Randwick, fonds de carte (CARTO, Esri) et photos d'avions (Planespotters). */
+const IMG_HOSTS = "https://www.randwick.nsw.gov.au https://*.basemaps.cartocdn.com https://server.arcgisonline.com https://*.plnspttrs.net https://*.planespotters.net";
 
 export function createApp(cfg: Config, store: Store, deps: { push?: Push; photos?: PhotoFinder } = {}) {
   const app = new Hono();

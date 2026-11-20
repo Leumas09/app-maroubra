@@ -223,21 +223,46 @@ export interface News {
   triagedBy: "model" | "keywords";
 }
 
+export type BeachFactorKey = "surf" | "period" | "wind" | "water" | "air" | "rain" | "stormwater" | "tide" | "bluebottles" | "uv" | "official";
+
+export interface BeachReason {
+  key: BeachFactorKey;
+  text: string;
+  effect: "plus" | "minus" | "info";
+  /** Points retirés au score de 10 (0 si le facteur n'enlève rien). */
+  pts: number;
+}
+
 export interface SwimHour {
   t: number;
   score: number;
+  surf: number | null; // m à la plage
+  period: number | null; // s
+  swellDir: number | null; // provenance, degrés
+  wind: number; // km/h
+  gust: number;
+  windDir: number; // provenance, degrés
+  side: "offshore" | "cross-shore" | "onshore";
+  sst: number | null;
+  feels: number;
+  uv: number;
+  pop: number | null;
+  /** Points retirés par facteur, pour expliquer les écarts entre les heures. */
+  pen: Partial<Record<BeachFactorKey, number>>;
 }
 
 export interface Beach {
   score: number; // 0 à 10
   label: "Great" | "Good" | "Fair" | "Poor" | "Stay out";
-  reasons: { text: string; effect: "plus" | "minus" | "info" }[];
-  best: { start: number; end: number; score: number } | null;
+  reasons: BeachReason[];
+  best: { start: number; end: number; score: number; because: string[]; still: string[] } | null;
   hours: SwimHour[];
-  sea: { label: string; surfM: number | null; periodS: number | null; dir: number | null; wind: string };
+  sea: { label: string; surfM: number | null; periodS: number | null; dir: number | null; wind: string; windKmh: number; gustKmh: number; windDir: number; side: SwimHour["side"] };
   bluebottles: boolean;
   afterRain: boolean;
   waterTemp: number | null;
+  /** Normale à la plage (degrés) : la mer est de ce côté. */
+  facing: number;
 }
 
 export interface Sunrise {
@@ -275,4 +300,30 @@ export interface SourceEntry<T = unknown> {
 export interface Snapshot {
   version: number;
   sources: Record<string, SourceEntry>;
+}
+
+/**
+ * Statut officiel de la plage : rapport du matin des sauveteurs de Randwick City Council (flux RSS),
+ * prévision de pollution Beachwatch (NSW), horaires de surveillance et note de danger Beachsafe (SLSA).
+ * Chaque partie peut manquer : les sources sont indépendantes.
+ */
+export interface BeachStatus {
+  status: "open" | "closed" | "unknown";
+  /** Raison de la fermeture, tirée du texte des sauveteurs (houle, requin, pollution…). */
+  reason: string | null;
+  lifeguard: {
+    summary: string | null;
+    description: string | null;
+    rips: string | null;
+    bluebottles: string | null;
+    waterTemp: string | null;
+    waveHeight: string | null;
+    at: string; // ISO, heure de publication
+    today: boolean; // publié aujourd'hui (heure de Sydney)
+    photo: string | null; // photo du matin publiée par la mairie
+  } | null;
+  patrol: { today: boolean; start: string | null; end: string | null } | null;
+  hazard: number | null; // note Beachsafe de 1 à 10
+  water: { forecast: "Unlikely" | "Possible" | "Likely" | null; latest: string | null; at: string | null } | null;
+  errors: string[];
 }

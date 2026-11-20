@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { beach, label, scoreHour, windSide } from "../src/derive/beach";
+import { beach, explainBest, label, scoreHour, windSide } from "../src/derive/beach";
+import { closureReason, parseBeachsafe, parseBeachwatch, parseLifeguards, reportFields } from "../src/sources/beach-status";
 import { due, moments } from "../src/derive/moments";
 import { ruleBrief } from "../src/derive/brief";
 import { scoreSunrise } from "../src/derive/sunrise";
@@ -129,6 +130,49 @@ describe("plage", () => {
     expect(b.best).not.toBeNull();
     expect(b.best!.score).toBeGreaterThanOrEqual(8);
     expect(b.sea.label).toBe("Clean");
+    expect(b.hours[0].pen).toBeDefined();
+    expect(b.best!.because.length).toBeGreaterThan(0);
+  });
+  it("fermeture officielle du jour : score à zéro et raison affichée", () => {
+    const s = scoreHour({ ...base, t: Date.parse("2026-11-09T01:00:00Z") / 1000 }, { ...ctx, closed: { reason: "Shark sighting", day: "2026-11-09" } });
+    expect(s.score).toBe(0);
+    expect(s.reasons.find((r) => r.key === "official")?.text).toBe("Closed by the lifeguards: shark sighting");
+  });
+  it("Beachwatch remplace la règle de la pluie récente", () => {
+    expect(scoreHour(base, { ...ctx, afterRain: true, pollution: "Unlikely" }).reasons.some((r) => r.key === "stormwater")).toBe(false);
+    expect(scoreHour(base, { ...ctx, pollution: "Likely" }).score).toBeLessThanOrEqual(6);
+  });
+  it("le meilleur créneau s'explique par le vent qui tourne", () => {
+    const h = (t: number, side: "offshore" | "onshore", wind: number, windPen: number) => ({ t, score: 10 - windPen, surf: 0.5, period: 9, swellDir: 120, wind, gust: wind, windDir: side === "offshore" ? 270 : 60, side, sst: 21, feels: 25, uv: 6, pop: 0, pen: windPen ? { wind: windPen } : {} });
+    const t0 = Date.parse("2026-12-05T21:00:00Z") / 1000;
+    const day = [h(t0, "offshore", 8, 0), h(t0 + 3600, "offshore", 10, 0), h(t0 + 7200, "onshore", 22, 1), h(t0 + 10800, "onshore", 28, 2)];
+    const e = explainBest(day, t0, t0 + 7200, []);
+    expect(e.because[0]).toMatch(/^Offshore W wind 8 km\/h; onshore ENE 28 km\/h at 11:00$/);
+  });
+});
+
+describe("statut officiel de la plage", () => {
+  const xml = readFileSync(new URL("./fixtures/randwick-lifeguards-2026-11-09.xml", import.meta.url), "utf8");
+  it("rapport des sauveteurs de Randwick : fermée, raison, champs, photo (capture du 09/11/2026)", () => {
+    const r = parseLifeguards(xml, new Date("2026-11-09T01:00:00Z"))!;
+    expect(r.status).toBe("closed");
+    expect(r.reason).toBe("Dangerous surf");
+    expect(r.lifeguard).toMatchObject({ rips: "Dangerous", bluebottles: "None sighted", waterTemp: "20 C", waveHeight: "+2m", today: true });
+    expect(r.lifeguard!.photo).toMatch(/^https:\/\/www\.randwick\.nsw\.gov\.au\/__data\/assets\/image\//);
+    expect(r.lifeguard!.at).toBe("2026-11-08T19:48:26.000Z");
+  });
+  it("un rapport de la veille ne donne pas de statut", () => {
+    expect(parseLifeguards(xml, new Date("2026-11-10T01:00:00Z"))!.status).toBe("unknown");
+  });
+  it("champs mal formés et raisons de fermeture", () => {
+    expect(reportFields("<p><strong>Beach Status</strong>: Open</p><p><strong>Rips:</strong> Be cautious</p>")).toEqual({ "beach status": "Open", rips: "Be cautious" });
+    expect(closureReason("Beach closed. Shark sighted off the south end.")).toBe("Shark sighting");
+    expect(closureReason("Closed due to poor water quality after rain")).toBe("Water pollution");
+  });
+  it("Beachwatch et Beachsafe", () => {
+    expect(parseBeachwatch({ features: [{ properties: { siteName: "South Maroubra Beach", pollutionForecast: "Likely" } }, { properties: { siteName: "Maroubra Beach", pollutionForecast: "Unlikely", latestResult: "Good" } }] }))
+      .toEqual({ forecast: "Unlikely", latest: "Good", at: null });
+    expect(parseBeachsafe({ beach: { hazard: 6, is_patrolled_today: { flag: true, start: "07:00", end: "19:00" } } })).toEqual({ patrol: { today: true, start: "07:00", end: "19:00" }, hazard: 6 });
   });
 });
 
