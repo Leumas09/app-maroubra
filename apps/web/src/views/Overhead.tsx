@@ -222,7 +222,11 @@ export function Overhead({ e, night, demo }: { e: E<Flights>; night: boolean; de
 
   const airborne = home.filter((a) => !a.onGround);
   const emergencies = home.filter((a) => a.emergency);
-  const s = aircraft.find((a) => a.hex === sel) ?? emergencies[0] ?? airborne.find((a) => a.overhead) ?? airborne[0];
+  // L'avion choisi reste choisi même s'il sort de la zone chargée (on garde sa dernière fiche connue).
+  const lastSel = useRef<Aircraft | null>(null);
+  const found = sel ? aircraft.find((a) => a.hex === sel) : undefined;
+  if (found) lastSel.current = found;
+  const s = found ?? (sel && lastSel.current?.hex === sel ? lastSel.current : undefined) ?? emergencies[0] ?? airborne.find((a) => a.overhead) ?? airborne[0];
   const trace = useTrace(s?.hex ?? null, true);
 
   if (!f) return <section className="card"><CardHead title="Overhead"><Fresh e={e} /></CardHead><Empty>Waiting for aircraft positions.</Empty></section>;

@@ -152,19 +152,36 @@ export function FlightMap(p: Props) {
         lastFollow = now;
       }
 
+      // Trace complète de l'avion choisi : toujours dessinée, même quand l'avion est hors de l'écran
+      // ou hors de la zone chargée. Elle rejoint sa position affichée quand on la connaît.
+      const st = props.current.selectedTrace;
+      let selPt: L.Point | null = null;
+      const drawSelectedTrace = () => {
+        if (!st || st.length < 2) return;
+        const sel = aircraft.find((x) => x.hex === selected);
+        ctx.beginPath();
+        st.forEach(([la, lo], i) => { const q = m.latLngToContainerPoint([la, lo]); i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y); });
+        if (selPt) ctx.lineTo(selPt.x, selPt.y);
+        ctx.strokeStyle = sel?.emergency ? col.alert : col.accent; ctx.globalAlpha = 0.85; ctx.lineWidth = 3; ctx.lineJoin = "round";
+        ctx.stroke(); ctx.globalAlpha = 1;
+      };
+      // Position de l'avion choisi calculée d'avance, pour relier la trace avant de dessiner les avions.
+      if (selected) { const p0 = motion.pos(selected, t); if (p0) selPt = m.latLngToContainerPoint(p0); }
+      drawSelectedTrace();
+
       const list = [...aircraft].sort((a, b) => Number(a.hex === selected) - Number(b.hex === selected) || Number(!!a.emergency) - Number(!!b.emergency));
       for (const a of list) {
         if (a.onGround && zoom < 12) continue;
         const pos = motion.pos(a.hex, t);
         if (!pos) continue;
         const pt = m.latLngToContainerPoint(pos);
-        if (pt.x < -60 || pt.y < -60 || pt.x > size.x + 60 || pt.y > size.y + 60) continue;
         const on = a.hex === selected;
+        if (on) selPt = pt;
+        if (pt.x < -60 || pt.y < -60 || pt.x > size.x + 60 || pt.y > size.y + 60) continue;
         const color = a.emergency ? col.alert : on ? col.accent : a.interesting ? col.sun : a.onGround ? col.muted : col.ink;
 
-        // Trace, prolongée jusqu'à la position affichée.
-        const st = props.current.selectedTrace;
-        const trail = on && st && st.length > a.trail.length ? st : a.trail;
+        // Trace courte, prolongée jusqu'à la position affichée (celle de l'avion choisi est dessinée à part).
+        const trail = on && st && st.length > 1 ? [] : a.trail;
         if (trail.length > 1) {
           ctx.beginPath();
           trail.forEach(([la, lo], i) => { const q = m.latLngToContainerPoint([la, lo]); i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y); });
