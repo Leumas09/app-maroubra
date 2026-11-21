@@ -17,7 +17,7 @@ import { air, fires, space } from "./sources/hazards";
 import { issCollector } from "./sources/iss";
 import { newsCollector } from "./sources/news";
 import { satelliteCollector } from "./sources/himawari";
-import { buoy, buoyForecast, marine } from "./sources/sea";
+import { buoy, buoyForecast, marine, nearshoreBuoy } from "./sources/sea";
 import { airportForecast, metar, weather } from "./sources/weather";
 import { Store } from "./store";
 import { azureCredential, table } from "./tables";
@@ -86,7 +86,7 @@ const derived: Collector[] = [
 ];
 
 const collectors: Collector[] = [
-  weather, metar, marine, buoy, airportForecast, buoyForecast, flightsCollector((o) => void archiveOutcome(archive, o)),
+  weather, metar, marine, buoy, nearshoreBuoy, airportForecast, buoyForecast, flightsCollector((o) => void archiveOutcome(archive, o)),
   satelliteCollector({ onImage: (png) => { satellitePng = png; }, onSunrise: (s) => void archiveSunriseSky(archive, s) }), fires, air, space, issCollector(), sunrise, newsCollector(llm), ...derived,
 ];
 startCollectors(store, collectors, { offline: cfg.offline });

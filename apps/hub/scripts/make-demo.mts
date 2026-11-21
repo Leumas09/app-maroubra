@@ -36,6 +36,8 @@ const metar: Metar = { station: "YSSY", t: nowS - 20 * 60, temp: 24, dewpoint: 1
 const marine: Marine = { hourly: hours.filter((t) => t >= nowS - 3600).map((t, i) => ({ t, waveHeight: 1.3 + 0.01 * i, waveDir: 140, wavePeriod: 9, swellHeight: 1.1 + 0.008 * i, swellDir: 150, swellPeriod: 11.5, windWaveHeight: 0.4, sst: 20.4 })) };
 const buoy: Buoy = { station: "Sydney Waverider (MHL)", lat: -33.75, lon: 151.4, latest: { t: nowS - 2 * 3600, hs: 1.45, hmax: 2.6, tp: 11.8, dir: 148 },
   series: Array.from({ length: 44 }, (_, i) => ({ t: nowS - (46 - i) * 3600, hs: 1.2 + 0.4 * Math.sin(i / 7), hmax: 2.3, tp: 11 + Math.sin(i / 9), dir: 150 })) };
+const nearBuoy: Buoy = { station: "Collaroy-Narrabeen nearshore buoy (IMOS)", lat: -33.73, lon: 151.31, latest: { t: nowS - 3600, hs: 0.86, hmax: 1.5, tp: 11.5, dir: 128 },
+  series: buoy.series.map((o) => ({ ...o, hs: o.hs! * 0.6, dir: 128 })) };
 const raw: RawAc[] = [
   { hex: "7c6b2d", flight: "QFA432", r: "VH-VZA", t: "B738", alt_baro: 2100, gs: 165, track: 338, baro_rate: -640, lat: -34.012, lon: 151.205, seen_pos: 1 },
   { hex: "7c4920", flight: "VOZ821", r: "VH-YIA", t: "B738", alt_baro: 7800, gs: 290, track: 160, baro_rate: 1800, lat: -33.99, lon: 151.21, seen_pos: 1 },
@@ -96,5 +98,5 @@ const scene = clearRef(grid), ref = localRef(grid, scene);
 writeFileSync(`${out}.png`, render(grid, ref));
 const satellite = { at: new Date(at.getTime() - 20 * 60e3).toISOString(), band: "B13 infrared 10.4 µm", spanKm: 300, clearK: scene, overhead: cloudAt(grid, ref, 0, 0, 10), within50km: cloudAt(grid, ref, 0, 0, 50), alongSunrise: [] };
 
-writeFileSync(out, JSON.stringify({ satellite, verify: verification, weather: weatherShown, metar, marine, buoy, flights, fires, air, space, iss, sunrise, news, beach: b, moments: ms, brief }));
+writeFileSync(out, JSON.stringify({ "buoy-near": nearBuoy, satellite, verify: verification, weather: weatherShown, metar, marine, buoy, flights, fires, air, space, iss, sunrise, news, beach: b, moments: ms, brief }));
 console.log(out, "beach", b.score, b.label, "moments", ms.length, "fires", fires.nearby.length, "brief:", brief.text);

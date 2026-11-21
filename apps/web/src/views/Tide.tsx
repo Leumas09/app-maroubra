@@ -43,8 +43,9 @@ const signed = (h: number) => `${h >= 0 ? "+" : "−"}${Math.abs(h).toFixed(2)} 
 type E<T> = (SourceEntry<T> & { stale: boolean; ageMin: number | null }) | null;
 
 /** Houle mesurée à la bouée (48 h passées) puis prévue (5 jours), sur le même axe. */
-function SwellChart({ buoy, marine, now }: { buoy: Buoy | null; marine: Marine | null; now: Date }) {
+function SwellChart({ buoy, near, marine, now }: { buoy: Buoy | null; near: Buoy | null; marine: Marine | null; now: Date }) {
   const obs = (buoy?.series ?? []).map((o) => ({ t: o.t * 1000, h: o.hs ?? 0 }));
+  const shore = (near?.series ?? []).map((o) => ({ t: o.t * 1000, h: o.hs ?? 0 }));
   const fc = (marine?.hourly ?? []).filter((h) => h.t * 1000 >= now.getTime() - 3600e3).slice(0, 120).map((h) => ({ t: h.t * 1000, h: h.swellHeight ?? h.waveHeight ?? 0 }));
   if (obs.length + fc.length < 2) return null;
   const W = 1000, H = 200, P = 34;
@@ -60,6 +61,9 @@ function SwellChart({ buoy, marine, now }: { buoy: Buoy | null; marine: Marine |
         <g key={m}><line x1={P} x2={W - P} y1={y(m)} y2={y(m)} stroke="var(--line)" strokeDasharray="3 6" /><text x={4} y={y(m) + 4} fontSize="12" fill="var(--muted)">{m} m</text></g>
       ))}
       <path d={line(obs)} fill="none" stroke="var(--ink)" strokeWidth="2.5" />
+      {shore.length > 1 && <path d={line(shore)} fill="none" stroke="var(--accent)" strokeOpacity="0.8" strokeWidth="2" />}
+      {shore.length > 1 && <text x={x(shore[0].t) + 4} y={y(shore[0].h) + 16} fontSize="12" fill="var(--accent)">near shore</text>}
+      {obs.length > 1 && <text x={x(obs[0].t) + 4} y={y(obs[0].h) - 8} fontSize="12" fill="var(--ink)">offshore</text>}
       <path d={line(fc)} fill="none" stroke="var(--accent)" strokeWidth="2.5" strokeDasharray="6 5" />
       <line x1={x(now.getTime())} x2={x(now.getTime())} y1={12} y2={H - 28} stroke="var(--alert)" strokeDasharray="3 3" />
       <text x={x(now.getTime()) - 6} y={20} textAnchor="end" fontSize="12" fontWeight="700" fill="var(--ink)">measured</text>
@@ -69,7 +73,7 @@ function SwellChart({ buoy, marine, now }: { buoy: Buoy | null; marine: Marine |
   );
 }
 
-export function Sea({ table, now, buoy, marine }: { table: TideTable | null; now: Date; buoy: E<Buoy>; marine: E<Marine> }) {
+export function Sea({ table, now, buoy, near, marine }: { table: TideTable | null; now: Date; buoy: E<Buoy>; near: E<Buoy>; marine: E<Marine> }) {
   const t = table && tideNow(table, now);
   const b = buoy?.data?.latest;
   const sst = marine?.data?.hourly[0]?.sst;
@@ -91,7 +95,7 @@ export function Sea({ table, now, buoy, marine }: { table: TideTable | null; now
         </CenteredScroll>
       )}
       <CenteredScroll className="card chart-scroll" focus={0.32}>
-        <SwellChart buoy={buoy?.data ?? null} marine={marine?.data ?? null} now={now} />
+        <SwellChart buoy={buoy?.data ?? null} near={near?.data ?? null} marine={marine?.data ?? null} now={now} />
       </CenteredScroll>
       <div className="grid">
         <div className="card">
@@ -107,6 +111,18 @@ export function Sea({ table, now, buoy, marine }: { table: TideTable | null; now
           ) : <Empty>No recent buoy reading.</Empty>}
           <p className="note">Waverider buoy about 10 km off Long Reef, north of the Harbour, run by Manly Hydraulics Laboratory, data via the Australian Ocean Data Network.</p>
         </div>
+        {near?.data?.latest && (
+          <div className="card">
+            <CardHead title="Near the shore"><Fresh e={near} label="Reading" /></CardHead>
+            <dl className="kv">
+              <dt>Significant height</dt><dd>{near.data.latest.hs?.toFixed(2) ?? "n/a"} m</dd>
+              <dt>Peak period</dt><dd>{near.data.latest.tp != null ? `${near.data.latest.tp.toFixed(1)} s` : "n/a"}</dd>
+              <dt>From</dt><dd>{near.data.latest.dir != null ? `${compass(near.data.latest.dir)} (${Math.round(near.data.latest.dir)}°)` : "n/a"}</dd>
+              <dt>Measured at</dt><dd>{time(new Date(near.data.latest.t * 1000))}</dd>
+            </dl>
+            <p className="note">Collaroy-Narrabeen buoy, 14 m deep off an east-facing beach 25 km north. Over two and a half years it measured near-shore waves at about 80% of the offshore swell from the east, and under half from the south: the beach score uses that.</p>
+          </div>
+        )}
         {t && (
           <div className="card">
             <h2>Next highs and lows</h2>

@@ -8,7 +8,24 @@ import { angleDiff } from "../geo";
 import { minutesFromLow, type TideExtremum } from "./tide";
 
 const BEACH_NORMAL = 100;
-const NEARSHORE = 0.8; // atténuation approximative de la houle du large à la plage
+/**
+ * Houle près du bord rapportée à celle du large, selon la direction de la houle. Mesuré, et non supposé :
+ * 17 722 paires de mesures de la bouée côtière de Collaroy-Narrabeen (14 m de fond, plage orientée est,
+ * comme Maroubra) et de la bouée du large de Sydney, avril 2024 à novembre 2026 (scripts/nearshore-ratio.mts).
+ * Médianes : 0,83 de NNE à ENE, 0,78 d'est, 0,62 de sud-est, 0,46 de sud. L'ancienne constante 0,8
+ * surestimait les vagues par houle de sud-est et de sud, la plus fréquente à Sydney.
+ */
+const NEARSHORE: [number, number][] = [[45, 0.83], [90, 0.78], [135, 0.62], [180, 0.46], [225, 0.43]];
+export function nearshoreFactor(dir: number | null | undefined): number {
+  if (dir == null || !Number.isFinite(dir)) return 0.62; // médiane de toutes directions confondues : 0,60
+  const d = ((dir % 360) + 360) % 360;
+  if (d <= NEARSHORE[0][0] || d > 300) return NEARSHORE[0][1];
+  for (let i = 0; i + 1 < NEARSHORE.length; i++) {
+    const [a, fa] = NEARSHORE[i], [b, fb] = NEARSHORE[i + 1];
+    if (d <= b) return fa + ((fb - fa) * (d - a)) / (b - a);
+  }
+  return NEARSHORE.at(-1)![1];
+}
 
 export type WindSide = "offshore" | "cross-shore" | "onshore";
 export function windSide(fromDeg: number): WindSide {
@@ -74,9 +91,11 @@ export function beach(weather: Weather, marine: Marine | null, buoy: Buoy | null
     .map((h) => {
       const m = mByT.get(h.t);
       // La bouée fait foi pour les premières heures, la prévision ensuite.
-      const offshoreHs = h.t - nowS < 3 * 3600 && buoyNow?.hs != null ? buoyNow.hs : m?.swellHeight ?? m?.waveHeight ?? null;
+      const fromBuoy = h.t - nowS < 3 * 3600 && buoyNow?.hs != null;
+      const offshoreHs = fromBuoy ? buoyNow!.hs : m?.swellHeight ?? m?.waveHeight ?? null;
+      const dir = fromBuoy ? buoyNow!.dir : m?.swellDir ?? m?.waveDir ?? null;
       return {
-        t: h.t, surf: offshoreHs == null ? null : offshoreHs * NEARSHORE, period: (h.t - nowS < 3 * 3600 ? buoyNow?.tp : null) ?? m?.swellPeriod ?? null,
+        t: h.t, surf: offshoreHs == null ? null : offshoreHs * nearshoreFactor(dir), period: (h.t - nowS < 3 * 3600 ? buoyNow?.tp : null) ?? m?.swellPeriod ?? null,
         wind: h.wind, windDir: h.windDir, sst: m?.sst ?? marine?.hourly[0]?.sst ?? null, feels: h.feels, precip: h.precip, pop: h.pop, uv: h.uv,
       };
     });
@@ -100,7 +119,7 @@ export function beach(weather: Weather, marine: Marine | null, buoy: Buoy | null
   const seaLabel = hs == null ? "Unknown" : hs < 0.5 ? "Flat" : side === "onshore" && w.wind >= 20 ? "Choppy and messy" : hs > 2.5 ? "Big and powerful" : side === "offshore" ? "Clean" : "Moderate";
   return {
     score: current.score, label: label(current.score), reasons: current.reasons, best, hours,
-    sea: { label: seaLabel, surfM: hs == null ? null : Math.round(hs * NEARSHORE * 10) / 10, periodS: buoyNow?.tp ?? marine?.hourly[0]?.swellPeriod ?? null, dir: buoyNow?.dir ?? marine?.hourly[0]?.swellDir ?? null, wind: `${side}, ${Math.round(w.wind)} km/h` },
+    sea: { label: seaLabel, surfM: hs == null ? null : Math.round(hs * nearshoreFactor(buoyNow?.dir ?? marine?.hourly[0]?.swellDir) * 10) / 10, periodS: buoyNow?.tp ?? marine?.hourly[0]?.swellPeriod ?? null, dir: buoyNow?.dir ?? marine?.hourly[0]?.swellDir ?? null, wind: `${side}, ${Math.round(w.wind)} km/h` },
     bluebottles, afterRain, waterTemp: marine?.hourly[0]?.sst ?? null,
   };
 }

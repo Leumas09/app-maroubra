@@ -31,10 +31,11 @@ export const marine: Collector<Marine> = {
 };
 
 const AODN = "https://aodn-cloud-optimised.s3.amazonaws.com";
-const PREFIX = "wave_buoy_realtime_nonqc.parquet/site_name=Sydney/";
+const prefix = (site: string) => `wave_buoy_realtime_nonqc.parquet/site_name=${site}/`;
 
 /** Clés des fichiers mensuels de la bouée, triées (la clé contient l'époque du début de mois). */
-export async function buoyKeys(): Promise<string[]> {
+export async function buoyKeys(site = "Sydney"): Promise<string[]> {
+  const PREFIX = prefix(site);
   const out: string[] = [];
   let token: string | null = null;
   do {
@@ -51,7 +52,7 @@ interface BuoyRow { TIME: Date | number | string; WSSH?: number | null; WHTH?: n
 
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
-export function parseBuoyRows(rows: BuoyRow[], now = Date.now()): Buoy {
+export function parseBuoyRows(rows: BuoyRow[], now = Date.now(), station = "Sydney Waverider (MHL)"): Buoy {
   const obs: BuoyObs[] = rows
     .map((r) => ({
       t: Math.round(new Date(r.TIME as string).getTime() / 1000),
@@ -64,7 +65,7 @@ export function parseBuoyRows(rows: BuoyRow[], now = Date.now()): Buoy {
     .sort((a, b) => a.t - b.t);
   const last = rows.at(-1);
   return {
-    station: "Sydney Waverider (MHL)",
+    station,
     lat: num(last?.LATITUDE) ?? -33.77,
     lon: num(last?.LONGITUDE) ?? 151.41,
     latest: obs.at(-1) ?? null,
@@ -72,20 +73,27 @@ export function parseBuoyRows(rows: BuoyRow[], now = Date.now()): Buoy {
   };
 }
 
-export const buoy: Collector<Buoy> = {
-  id: "buoy",
-  everyMs: 20 * 60e3,
-  staleAfterMs: 6 * 3600e3,
-  run: async () => {
-    const keys = (await buoyKeys()).slice(-2); // mois précédent et mois en cours
-    const rows: BuoyRow[] = [];
-    for (const k of keys) {
-      const buf = await fetchBytes(`${AODN}/${k.split("/").map(encodeURIComponent).join("/")}`);
-      rows.push(...((await parquetReadObjects({ file: buf, columns: ["TIME", "WSSH", "WHTH", "WMXH", "WPPE", "WPDI", "LATITUDE", "LONGITUDE"] })) as BuoyRow[]));
-    }
-    return parseBuoyRows(rows);
-  },
-};
+function buoyCollector(id: string, site: string, station: string): Collector<Buoy> {
+  return {
+    id,
+    everyMs: 20 * 60e3,
+    staleAfterMs: 6 * 3600e3,
+    run: async () => {
+      const keys = (await buoyKeys(site)).slice(-2); // mois précédent et mois en cours
+      const rows: BuoyRow[] = [];
+      for (const k of keys) {
+        const buf = await fetchBytes(`${AODN}/${k.split("/").map(encodeURIComponent).join("/")}`);
+        rows.push(...((await parquetReadObjects({ file: buf, columns: ["TIME", "WSSH", "WHTH", "WMXH", "WPPE", "WPDI", "LATITUDE", "LONGITUDE"] })) as BuoyRow[]));
+      }
+      return parseBuoyRows(rows, Date.now(), station);
+    },
+  };
+}
+
+/** Bouée du large de Sydney (MHL, environ 90 m de fond), le juge des vagues. */
+export const buoy = buoyCollector("buoy", "Sydney", "Sydney Waverider (MHL)");
+/** Bouée côtière de Collaroy-Narrabeen (IMOS, 14 m de fond, plage orientée est) : la houle près du bord. */
+export const nearshoreBuoy = buoyCollector("buoy-near", "COLLAROY-NARRABEEN", "Collaroy-Narrabeen nearshore buoy (IMOS)");
 
 export const BUOY_POINT = { lat: -33.77, lon: 151.41 };
 

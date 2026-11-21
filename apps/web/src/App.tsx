@@ -185,7 +185,7 @@ export function App() {
         {current === "home" && <Home now={now} sky={sky} brief={brief?.text ?? null} beach={beach} weather={weather} buoy={buoy} marine={entry<Marine>(snap, "marine")} sunrise={entry<Sunrise>(snap, "sunrise")} space={entry<SpaceWeather>(snap, "space")} moments={moments} />}
         {current === "weather" && <Weather e={weather} metar={entry<Metar>(snap, "metar")} air={air} sat={entry<Satellite>(snap, "satellite")} night={!!night} />}
         {current === "beach" && <Beach e={beach} now={now} />}
-        {current === "sea" && <Sea table={tide} now={now} buoy={buoy} marine={entry<Marine>(snap, "marine")} />}
+        {current === "sea" && <Sea table={tide} now={now} buoy={buoy} near={entry<Buoy>(snap, "buoy-near")} marine={entry<Marine>(snap, "marine")} />}
         {current === "sky" && (sky ? <Sky s={sky} iss={entry<Iss>(snap, "iss")} space={entry<SpaceWeather>(snap, "space")} sunrise={entry<Sunrise>(snap, "sunrise")} weather={weather?.data} /> : <div className="card" style={{ minHeight: 320 }} aria-busy="true" />)}
         {current === "overhead" && <Overhead e={flights} />}
         {current === "fire" && <FireAir fires={fires} />}

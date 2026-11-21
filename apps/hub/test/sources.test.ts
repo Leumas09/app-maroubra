@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { beach, label, scoreHour, windSide } from "../src/derive/beach";
+import { beach, label, nearshoreFactor, scoreHour, windSide } from "../src/derive/beach";
 import { due, moments } from "../src/derive/moments";
 import { ruleBrief } from "../src/derive/brief";
 import { scoreSunrise } from "../src/derive/sunrise";
@@ -197,5 +197,15 @@ describe("moments du ciel et nuages", () => {
     expect(moments({ iss, weather: w(10) }, now).find((m) => m.kind === "iss")?.detail).not.toMatch(/Cloud/);
     expect(moments({ iss, weather: w(60) }, now).find((m) => m.kind === "iss")?.detail).toMatch(/Cloud forecast 60%/);
     expect(moments({ iss, weather: w(95) }, now).find((m) => m.kind === "iss")).toBeUndefined();
+  });
+});
+
+describe("houle près du bord, mesurée (Collaroy contre Sydney, 17 722 paires)", () => {
+  it("dépend de la direction : presque entière de l'est, moitié du sud", () => {
+    expect(nearshoreFactor(90)).toBeCloseTo(0.78, 2);
+    expect(nearshoreFactor(180)).toBeCloseTo(0.46, 2);
+    expect(nearshoreFactor(157.5)).toBeCloseTo(0.54, 2);
+    expect(nearshoreFactor(20)).toBeCloseTo(0.83, 2);
+    expect(nearshoreFactor(null)).toBeCloseTo(0.62, 2);
   });
 });

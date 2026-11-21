@@ -78,6 +78,13 @@
       "target": "good enough to judge the sunrise score",
       "result": "correlation 0.19 for low cloud, 0.44 for mid and high: not used as a judge",
       "pass": false
+    },
+    {
+      "name": "Surf near the shore vs offshore swell",
+      "judge": "Collaroy-Narrabeen nearshore buoy (14 m deep) vs Sydney offshore buoy, 17,722 paired readings, Apr 2024 to Nov 2026",
+      "target": "measured, not assumed",
+      "result": "0.83 from the NE, 0.78 E, 0.62 SE, 0.46 S (the old fixed 0.8 overstated southerly swell)",
+      "pass": true
     }
   ],
   "verifications": [
