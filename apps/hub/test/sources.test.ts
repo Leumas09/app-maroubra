@@ -4,6 +4,8 @@ import { beach, label, nearshoreFactor, scoreHour, windSide } from "../src/deriv
 import { due, moments } from "../src/derive/moments";
 import { ruleBrief } from "../src/derive/brief";
 import { scoreSunrise } from "../src/derive/sunrise";
+import { SITE } from "../src/config";
+import { destination } from "../src/geo";
 import { isCurfew, normalize, predictOverhead, runwayMode, type RawAc } from "../src/sources/flights";
 import { auroraFromKp, parseDescription, parseFires, parseSpace } from "../src/sources/hazards";
 import { dedupe, keywordLocal, parseRss } from "../src/sources/news";
@@ -41,7 +43,7 @@ describe("feux NSW RFS (flux réel du 10/10/2020)", () => {
 describe("avions (format v2 d'adsb.lol, données construites à la main)", () => {
   const raw: RawAc[] = [
     { hex: "7c6b2d", flight: "QFA432  ", r: "VH-VZA", t: "B738", alt_baro: 1800, gs: 160, track: 340, baro_rate: -700, lat: -34.02, lon: 151.20, seen_pos: 1 },
-    { hex: "7c0001", flight: "QFA1", t: "A388", alt_baro: 4000, gs: 250, track: 90, lat: -33.9496, lon: 151.20, seen_pos: 1 },
+    { hex: "7c0001", flight: "QFA1", t: "A388", alt_baro: 4000, gs: 250, track: 90, baro_rate: 1500, lat: -33.9496, lon: 151.20, seen_pos: 1 },
     { hex: "7cffff", alt_baro: "ground", lat: -33.94, lon: 151.18, seen_pos: 2 },
     { hex: "stale", lat: -33.9, lon: 151.2, seen_pos: 200 },
   ];
@@ -63,6 +65,17 @@ describe("avions (format v2 d'adsb.lol, données construites à la main)", () =>
   });
   it("pas de survol pour un avion qui s'éloigne", () => {
     expect(predictOverhead({ lat: -33.9496, lon: 151.30, track: 90, speedKt: 250 })).toBeNull();
+  });
+  it("pas d'annonce pour un avion en manoeuvre d'arrivée, sauf aligné sur la finale 25", () => {
+    // Cas réel du 21/11/2026 : vent arrière vers l'est-nord-est, bas et en descente, puis virage loin de Maroubra.
+    const [lat, lon] = destination(SITE.lat, SITE.lon, 250, 20);
+    const downwind = { lat, lon, track: 70, speedKt: 280 };
+    expect(predictOverhead(downwind)).not.toBeNull();
+    expect(predictOverhead({ ...downwind, altFt: 6700, vrate: -1088 })).toBeNull();
+    expect(predictOverhead({ ...downwind, altFt: 11000, vrate: -1400 })).not.toBeNull();
+    expect(predictOverhead({ ...downwind, altFt: 3000, vrate: 2000 })).not.toBeNull(); // départ en montée
+    const [la2, lo2] = destination(SITE.lat, SITE.lon, 70, 15);
+    expect(predictOverhead({ lat: la2, lon: lo2, track: 250, speedKt: 180, altFt: 3000, vrate: -700 })).not.toBeNull();
   });
   it("déduit le mode de pistes et le couvre-feu", () => {
     expect(runwayMode(acs)?.mode).toBe("Arrivals on runway 34L/34R");

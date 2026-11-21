@@ -24,47 +24,28 @@ export interface RawAc {
 
 interface RawRoute { callsign: string; airport_codes: string; _airport_codes_iata?: string; _airports: { iata: string; name: string; location: string }[]; plausible?: boolean }
 
+/**
+ * Avion en manoeuvre d'arrivée : sous 9 000 ft, sans monter, à moins de 45 km de l'aéroport et pas aligné
+ * sur la finale de la piste 25 (la seule qui passe au-dessus de Maroubra). Le contrôle le fait encore
+ * tourner (vent arrière, base) : prolonger sa trajectoire en ligne droite ne vaut rien. Règle établie
+ * sur l'enregistrement ADS-B du 21/11/2026 avant 20:50 UTC, jugée ensuite sur la suite (bench/results).
+ */
+export function inArrivalManoeuvre(a: { lat: number; lon: number; track: number | null; altFt?: number | null; vrate?: number | null }): boolean {
+  if (a.altFt == null || a.altFt >= 9000 || (a.vrate ?? 0) > 300) return false;
+  if (distanceKm(a.lat, a.lon, YSSY.lat, YSSY.lon) > 45) return false;
+  return !(a.track != null && a.track >= 230 && a.track <= 270);
+}
+
 /** Survol prévu : on prolonge la trajectoire en ligne droite 8 minutes et on cherche le passage le plus proche. */
-export function predictOverhead(a: { lat: number; lon: number; track: number | null; speedKt: number | null }, home = SITE): Aircraft["overhead"] {
+export function predictOverhead(a: { lat: number; lon: number; track: number | null; speedKt: number | null; altFt?: number | null; vrate?: number | null }, home = SITE): Aircraft["overhead"] {
   if (a.track == null || !a.speedKt || a.speedKt < 60) return null;
+  if (inArrivalManoeuvre(a)) return null;
   const kmPerMin = (a.speedKt * 1.852) / 60;
   let best = { d: Infinity, m: 0 };
   for (let m = 0; m <= 8; m += 0.25) {
     const [la, lo] = destination(a.lat, a.lon, a.track, kmPerMin * m);
     const d = distanceKm(la, lo, home.lat, home.lon);
     if (d < best.d) best = { d, m };
-  }
-  return best.d <= 1.5 && best.m >= 0.5 ? { inMin: Math.round(best.m), closestKm: Math.round(best.d * 10) / 10 } : null;
-}
-
-/**
- * Survol prévu en tenant compte du virage en cours : le taux de virage est mesuré sur les dernières
- * positions de la trace (relevés toutes les 10 s), plafonné à 3,5 °/s, et le virage s'arrête après 120°
- * (un avion qui tourne vers la finale finit par s'aligner). Sans virage net, c'est la ligne droite.
- */
-export function predictOverheadTurning(a: { lat: number; lon: number; track: number | null; speedKt: number | null; trail: [number, number][] }, home = SITE, pollS = 10): Aircraft["overhead"] {
-  if (a.track == null || !a.speedKt || a.speedKt < 60) return null;
-  const tr = a.trail;
-  let rate = 0;
-  if (tr.length >= 5) {
-    const p = tr.slice(-5);
-    const h1 = bearingDeg(p[0][0], p[0][1], p[2][0], p[2][1]), h2 = bearingDeg(p[2][0], p[2][1], p[4][0], p[4][1]);
-    const moved = distanceKm(p[0][0], p[0][1], p[4][0], p[4][1]);
-    const turn = ((h2 - h1 + 540) % 360) - 180;
-    if (moved > 0.3) rate = Math.max(-3.5, Math.min(3.5, turn / (2 * pollS)));
-    if (Math.abs(rate) < 0.4) rate = 0;
-  }
-  if (!rate) return predictOverhead(a, home);
-  const kmPerS = (a.speedKt * 1.852) / 3600;
-  let lat = a.lat, lon = a.lon, hdg = a.track, turned = 0;
-  let best = { d: distanceKm(lat, lon, home.lat, home.lon), m: 0 };
-  const step = 5;
-  for (let t = step; t <= 8 * 60; t += step) {
-    if (Math.abs(turned) < 120) { hdg = (hdg + rate * step + 360) % 360; turned += rate * step; }
-    const prev: [number, number] = [lat, lon];
-    [lat, lon] = destination(lat, lon, hdg, kmPerS * step);
-    const d = segmentMinKm(prev, [lat, lon], home);
-    if (d < best.d) best = { d, m: t / 60 };
   }
   return best.d <= 1.5 && best.m >= 0.5 ? { inMin: Math.round(best.m), closestKm: Math.round(best.d * 10) / 10 } : null;
 }
@@ -115,7 +96,7 @@ export function normalize(raw: RawAc[], routes: Map<string, RawRoute>, trails: M
         route: route && route.airport_codes !== "unknown" && route.plausible !== false
           ? { codes: route._airport_codes_iata ?? route.airport_codes, from: airport(route._airports[0]), to: airport(route._airports.at(-1)) }
           : null,
-        overhead: onGround ? null : predictOverhead({ lat, lon, track: r.track ?? null, speedKt }),
+        overhead: onGround ? null : predictOverhead({ lat, lon, track: r.track ?? null, speedKt, altFt: typeof r.alt_baro === "number" ? r.alt_baro : null, vrate: r.baro_rate ?? r.geom_rate ?? null }),
         trail: trails.get(r.hex) ?? [],
       };
       return ac;
