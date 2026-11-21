@@ -10,6 +10,7 @@ import { scoreSunrise } from "../src/derive/sunrise";
 import { loadTide } from "../src/derive/tide";
 import { normalize, runwayMode, type RawAc } from "../src/sources/flights";
 import { parseFires } from "../src/sources/hazards";
+import { parseWarnings } from "../src/sources/weather";
 
 const at = new Date(process.argv[2] ?? "2026-11-14T03:00:00Z");
 const out = process.argv[3] ?? "e2e-demo.json";
@@ -20,13 +21,13 @@ const localHour = (t: number) => Number(new Intl.DateTimeFormat("en-AU", { hour:
 const diurnal = (t: number) => Math.sin(((localHour(t) - 9) / 24) * 2 * Math.PI);
 
 const weather: Weather = {
-  current: { t: nowS, temp: 24.6, feels: 25.1, humidity: 62, precip: 0, code: 2, cloud: 35, wind: 17, windDir: 65, gust: 28, uv: 9.4, isDay: true },
+  current: { t: nowS, temp: 24.6, feels: 25.1, humidity: 62, precip: 0, code: 2, cloud: 35, wind: 17, windDir: 65, gust: 28, uv: 9.4, isDay: true, pressure: 1016.4, dewPoint: 16.8, visibility: 24000 },
   hourly: hours.map((t, i) => ({
     t, temp: 21 + 4 * diurnal(t), feels: 21 + 4.5 * diurnal(t), pop: i > 34 && i < 40 ? 60 : 10, precip: i > 35 && i < 39 ? 1.2 : 0, code: i > 35 && i < 39 ? 61 : 2,
     cloud: 35, cloudLow: 10, cloudMid: 30, cloudHigh: 20, wind: 12 + 6 * Math.max(0, diurnal(t)), windDir: localHour(t) >= 11 && localHour(t) <= 18 ? 60 : 280,
-    gust: 25, uv: Math.max(0, 10 * diurnal(t)), visibility: 20000, humidity: 60,
+    gust: 25, uv: Math.max(0, 10 * diurnal(t)), visibility: 20000, humidity: 60, pressure: 1016 - i * 0.05, dewPoint: 16, isDay: localHour(t) >= 6 && localHour(t) < 20,
   })).filter((x) => x.t >= nowS - 3600),
-  daily: Array.from({ length: 7 }, (_, i) => ({ t: h0 + i * 86400, code: [2, 61, 3, 1, 0, 2, 80][i], max: [26, 22, 23, 27, 29, 25, 21][i], min: [18, 17, 16, 18, 19, 18, 16][i], precip: [0, 6, 1, 0, 0, 0.5, 9][i], pop: [10, 70, 30, 5, 0, 20, 80][i], uvMax: 10, windMax: 25, gustMax: 40, windDir: [60, 180, 200, 270, 300, 60, 170][i] })),
+  daily: Array.from({ length: 10 }, (_, i) => ({ t: h0 + i * 86400, sunrise: h0 + i * 86400 - 8 * 3600 + 42 * 60, sunset: h0 + i * 86400 + 5 * 3600 + 35 * 60, code: [2, 61, 3, 1, 0, 2, 80, 3, 1, 95][i], max: [26, 22, 23, 27, 29, 25, 21, 22, 24, 27][i], min: [18, 17, 16, 18, 19, 18, 16, 15, 17, 19][i], precip: [0, 6, 1, 0, 0, 0.5, 9, 2, 0, 12][i], pop: [10, 70, 30, 5, 0, 20, 80, 40, 5, 85][i], uvMax: 10, windMax: 25, gustMax: 40, windDir: [60, 180, 200, 270, 300, 60, 170, 200, 90, 30][i] })),
   rainPast24h: 0.4,
 };
 const metar: Metar = { station: "YSSY", t: nowS - 20 * 60, temp: 24, dewpoint: 16, windDir: 50, windKt: 11, gustKt: null, visibility: "6+", qnh: 1016, raw: "YSSY SAMPLE DATA" };
@@ -85,5 +86,6 @@ const s = scoreSunrise([{ low: 10, mid: 45, high: 30 }, { low: 10, mid: 40, high
 const sunrise = { date: "2026-11-15", time: "2026-11-14T18:42:00Z", ...s };
 const ms = moments({ weather, beach: b, sunrise, iss, space, fires, flights }, at);
 const brief = { text: ruleBrief(facts(weather, b, "low tide at 18:40", ms, at)), at: at.toISOString(), by: "rules" };
-writeFileSync(out, JSON.stringify({ weather, metar, marine, buoy, beachStatus, flights, fires, air, space, iss, sunrise, news, beach: b, moments: ms, brief }));
+const warnings = parseWarnings(readFileSync(new URL("../test/fixtures/bom-warnings-nsw-2026-11-21.xml", import.meta.url), "utf8"));
+writeFileSync(out, JSON.stringify({ weather, warnings, metar, marine, buoy, beachStatus, flights, fires, air, space, iss, sunrise, news, beach: b, moments: ms, brief }));
 console.log(out, "beach", b.score, b.label, "moments", ms.length, "fires", fires.nearby.length, "brief:", brief.text);

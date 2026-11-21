@@ -17,6 +17,9 @@ export interface WeatherHour {
   uv: number;
   visibility: number | null; // m
   humidity: number;
+  pressure?: number | null; // hPa, niveau de la mer
+  dewPoint?: number | null; // °C
+  isDay?: boolean;
 }
 
 export interface WeatherDay {
@@ -30,13 +33,20 @@ export interface WeatherDay {
   windMax: number;
   gustMax: number;
   windDir: number;
+  sunrise?: number | null; // secondes Unix
+  sunset?: number | null;
 }
 
 export interface Weather {
-  current: { t: number; temp: number; feels: number; humidity: number; precip: number; code: number; cloud: number; wind: number; windDir: number; gust: number; uv: number; isDay: boolean };
+  current: { t: number; temp: number; feels: number; humidity: number; precip: number; code: number; cloud: number; wind: number; windDir: number; gust: number; uv: number; isDay: boolean; pressure?: number | null; dewPoint?: number | null; visibility?: number | null };
   hourly: WeatherHour[];
   daily: WeatherDay[];
   rainPast24h: number;
+}
+
+/** Avertissements officiels du Bureau of Meteorology qui concernent Sydney (flux RSS public NSW). */
+export interface WeatherWarnings {
+  items: { title: string; link: string; at: string; statewide: boolean }[];
 }
 
 export interface Metar {
