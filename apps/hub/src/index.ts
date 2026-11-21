@@ -12,7 +12,7 @@ import { foundryLlm } from "./llm";
 import { photoFinder } from "./photos";
 import { Push } from "./push";
 import { createApp } from "./server";
-import { areaFinder, flightsCollector, type RouteCache } from "./sources/flights";
+import { areaFinder, flightShared, flightsCollector } from "./sources/flights";
 import { air, fires, space } from "./sources/hazards";
 import { issCollector } from "./sources/iss";
 import { newsCollector } from "./sources/news";
@@ -66,11 +66,11 @@ const derived: Collector[] = [
   },
 ];
 
-// Routes d'avions partagées entre le relevé de la maison et les zones demandées par la carte.
-const flightRoutes: RouteCache = new Map();
+// Routes et traces d'avions partagées entre le relevé de la maison et les zones demandées par la carte.
+const flights = flightShared();
 
 const collectors: Collector[] = [
-  weather, metar, marine, buoy, beachStatus, flightsCollector(flightRoutes), fires, air, space, issCollector(), sunrise, newsCollector(llm), ...derived,
+  weather, metar, marine, buoy, beachStatus, flightsCollector(flights), fires, air, space, issCollector(), sunrise, newsCollector(llm), ...derived,
 ];
 startCollectors(store, collectors, { offline: cfg.offline });
 
@@ -90,7 +90,7 @@ if (archive && !cfg.offline) {
   setTimeout(() => { tick(); setInterval(tick, 3600e3); }, 5 * 60e3);
 }
 
-const app = createApp(cfg, store, { push: push ?? undefined, photos: cfg.offline ? undefined : photoFinder(), area: cfg.offline ? undefined : areaFinder(flightRoutes) });
+const app = createApp(cfg, store, { push: push ?? undefined, photos: cfg.offline ? undefined : photoFinder(), area: cfg.offline ? undefined : areaFinder(flights), history: flights.history });
 serve({ fetch: app.fetch, port: cfg.port }, (info) => {
   console.log(JSON.stringify({ event: "listening", port: info.port, version: cfg.version, llm: !!llm, push: !!push, archive: !!archive }));
 });

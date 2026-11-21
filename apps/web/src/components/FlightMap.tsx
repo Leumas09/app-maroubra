@@ -52,6 +52,8 @@ interface Props {
   source: string;
   /** Zone visible (centre et rayon en km jusqu'au coin), à chaque fin de déplacement ou de zoom. */
   onView: (v: { lat: number; lon: number; radiusKm: number }) => void;
+  /** Trace complète de l'avion choisi (depuis le hub), plus longue que la trace courte de la liste. */
+  selectedTrace: [number, number][] | null;
 }
 
 export function FlightMap(p: Props) {
@@ -65,7 +67,7 @@ export function FlightMap(p: Props) {
 
   // Carte créée une seule fois.
   useEffect(() => {
-    const m = L.map(box.current!, { zoomControl: true, attributionControl: true, zoomAnimation: false, zoomSnap: 0.5, minZoom: 7, maxZoom: 17, worldCopyJump: false });
+    const m = L.map(box.current!, { zoomControl: true, attributionControl: true, zoomAnimation: false, zoomSnap: 1, minZoom: 7, maxZoom: 17, worldCopyJump: false });
     m.fitBounds(L.latLng(HOME).toBounds(2 * VIEW_RADIUS_M));
     m.attributionControl.setPrefix(false);
     // Trait de côte local, sans réseau : fond « Plain » seulement (au-dessus des tuiles, il masquerait la carte).
@@ -161,9 +163,11 @@ export function FlightMap(p: Props) {
         const color = a.emergency ? col.alert : on ? col.accent : a.interesting ? col.sun : a.onGround ? col.muted : col.ink;
 
         // Trace, prolongée jusqu'à la position affichée.
-        if (a.trail.length > 1) {
+        const st = props.current.selectedTrace;
+        const trail = on && st && st.length > a.trail.length ? st : a.trail;
+        if (trail.length > 1) {
           ctx.beginPath();
-          a.trail.forEach(([la, lo], i) => { const q = m.latLngToContainerPoint([la, lo]); i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y); });
+          trail.forEach(([la, lo], i) => { const q = m.latLngToContainerPoint([la, lo]); i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y); });
           ctx.lineTo(pt.x, pt.y);
           ctx.strokeStyle = color; ctx.globalAlpha = on ? 0.8 : 0.4; ctx.lineWidth = on ? 3 : 2; ctx.lineJoin = "round";
           ctx.stroke(); ctx.globalAlpha = 1;
