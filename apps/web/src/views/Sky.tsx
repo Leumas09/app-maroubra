@@ -1,4 +1,4 @@
-import type { Iss, SourceEntry, SpaceWeather, Sunrise } from "@maroubra/core";
+import type { Iss, SourceEntry, SpaceWeather, Sunrise, Weather as WeatherData } from "@maroubra/core";
 import { Fresh } from "../components/bits";
 import { CenteredScroll } from "../components/CenteredScroll";
 import { focusOf, HorizonChart } from "../components/HorizonChart";
@@ -6,11 +6,18 @@ import { auroraText } from "./FireAir";
 import { compass, duration, pct, shortDate, time } from "../lib/format";
 import type { SkyModel } from "../lib/sky-model";
 
-export function skyLede(s: SkyModel): string {
+/** Nuages prévus pendant une fenêtre (moyenne horaire), en %. */
+export function cloudDuring(w: WeatherData | null | undefined, start: Date, end: Date): number | null {
+  const hs = (w?.hourly ?? []).filter((h) => h.t * 1000 >= start.getTime() - 1800e3 && h.t * 1000 <= end.getTime());
+  return hs.length ? hs.reduce((a, h) => a + h.cloud, 0) / hs.length : null;
+}
+
+export function skyLede(s: SkyModel, w?: WeatherData | null): string {
   const parts: string[] = [];
   if (!s.isNight && s.sun.set) parts.push(`Sunset ${time(s.sun.set)}`);
   const dark = s.dark[0];
-  if (dark) parts.push(`dark sky from ${time(dark.start)} for ${duration(dark.end.getTime() - dark.start.getTime())}`);
+  const cloud = dark ? cloudDuring(w, dark.start, dark.end) : null;
+  if (dark) parts.push(`dark sky from ${time(dark.start)} for ${duration(dark.end.getTime() - dark.start.getTime())}${cloud != null && cloud >= 70 ? `, but mostly cloudy (${Math.round(cloud)}%)` : cloud != null && cloud <= 20 ? ", and clear" : ""}`);
   else parts.push("no truly dark sky tonight, the Moon is up");
   const m = s.moonriseOverSeaNext[0];
   if (m && m.time.getTime() - s.now.getTime() < 24 * 3600e3) parts.push(`the Moon rises over the sea at ${time(m.time)}`);
@@ -21,17 +28,17 @@ export function skyLede(s: SkyModel): string {
 
 type E<T> = (SourceEntry<T> & { stale: boolean; ageMin: number | null }) | null;
 
-export function Sky({ s, iss, space, sunrise }: { s: SkyModel; iss?: E<Iss>; space?: E<SpaceWeather>; sunrise?: E<Sunrise> }) {
+export function Sky({ s, iss, space, sunrise, weather }: { s: SkyModel; iss?: E<Iss>; space?: E<SpaceWeather>; sunrise?: E<Sunrise>; weather?: WeatherData | null }) {
   const passes = iss?.data?.passes.filter((p) => Date.parse(p.end) > s.now.getTime()).slice(0, 4) ?? [];
   const sr = sunrise?.data;
   return (
     <section aria-labelledby="sky-title" className="layout-main" style={{ display: "grid", gap: 16 }}>
       <div className="card">
         <h1 id="sky-title" style={{ margin: "0 0 8px", fontSize: 15, color: "var(--muted)" }}>{s.isNight ? "Tonight over Maroubra" : "The sky over Maroubra"}</h1>
-        <p className="lede">{skyLede(s)}</p>
+        <p className="lede">{skyLede(s, weather)}</p>
       </div>
       <CenteredScroll className="card chart-scroll" focus={focusOf(s.tracks.sun, s.tracks.moon)}>
-        <HorizonChart sun={s.tracks.sun} moon={s.tracks.moon} planets={s.tracks.planets} summary={skyLede(s)} />
+        <HorizonChart sun={s.tracks.sun} moon={s.tracks.moon} planets={s.tracks.planets} summary={skyLede(s, weather)} />
       </CenteredScroll>
       <div className="grid">
         <div className="card">

@@ -104,9 +104,16 @@ export function App() {
   const urgentFire = activeFires.some((x) => x.alert === "Emergency Warning" || x.alert === "Watch and Act" || x.smokeTowardUs);
 
   const serverMoments = data<Moment[]>(snap, "moments") ?? [];
+  // Les moments du ciel calculés ici : la prévision de nuages dit s'ils valent la peine.
+  const cloudNote = (m: { at: Date; kind: string; detail: string }) => {
+    if (!["dark", "planet", "moon"].includes(m.kind)) return m.detail;
+    const h = weather?.data?.hourly.find((x) => Math.abs(x.t * 1000 - m.at.getTime()) <= 30 * 60e3);
+    const c = h ? (m.kind === "moon" ? h.cloudLow : h.cloud) : null;
+    return c != null && c >= 70 ? `${m.detail}. Cloudy (${Math.round(c)}%), likely hidden` : m.detail;
+  };
   const moments = [
     ...serverMoments.map((m) => ({ at: new Date(m.at), title: m.title, detail: m.detail, urgent: m.priority === 1 })),
-    ...(sky?.moments ?? []).filter((m) => !serverMoments.some((s) => s.title.split(" at ")[0] === m.title)).map((m) => ({ ...m, urgent: false })),
+    ...(sky?.moments ?? []).filter((m) => !serverMoments.some((s) => s.title.split(" at ")[0] === m.title)).map((m) => ({ ...m, detail: cloudNote(m), urgent: false })),
   ].filter((m) => m.at.getTime() >= now.getTime() - 15 * 60e3).sort((x, y) => Number(y.urgent) - Number(x.urgent) || x.at.getTime() - y.at.getTime()).slice(0, 8);
 
   const link = (v: View, label: string, opts: { alert?: string } = {}) => (
@@ -145,7 +152,7 @@ export function App() {
         {current === "weather" && <Weather e={weather} metar={entry<Metar>(snap, "metar")} air={air} sat={entry<Satellite>(snap, "satellite")} night={!!night} />}
         {current === "beach" && <Beach e={beach} now={now} />}
         {current === "sea" && <Sea table={tide} now={now} buoy={buoy} marine={entry<Marine>(snap, "marine")} />}
-        {current === "sky" && (sky ? <Sky s={sky} iss={entry<Iss>(snap, "iss")} space={entry<SpaceWeather>(snap, "space")} sunrise={entry<Sunrise>(snap, "sunrise")} /> : <div className="card" style={{ minHeight: 320 }} aria-busy="true" />)}
+        {current === "sky" && (sky ? <Sky s={sky} iss={entry<Iss>(snap, "iss")} space={entry<SpaceWeather>(snap, "space")} sunrise={entry<Sunrise>(snap, "sunrise")} weather={weather?.data} /> : <div className="card" style={{ minHeight: 320 }} aria-busy="true" />)}
         {current === "overhead" && <Overhead e={flights} />}
         {current === "fire" && <FireAir fires={fires} />}
         {current === "news" && <News e={news} now={now} />}

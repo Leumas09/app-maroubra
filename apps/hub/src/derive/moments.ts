@@ -23,6 +23,21 @@ export interface MomentInputs {
   flights?: Flights | null;
 }
 
+/** Couverture nuageuse prévue à l'heure la plus proche de t (ms), en %. */
+export function cloudAt(w: Weather | null | undefined, t: number): { total: number; low: number } | null {
+  let best: Weather["hourly"][number] | null = null;
+  for (const h of w?.hourly ?? []) if (Math.abs(h.t * 1000 - t) <= 45 * 60e3 && (!best || Math.abs(h.t * 1000 - t) < Math.abs(best.t * 1000 - t))) best = h;
+  return best ? { total: best.cloud, low: best.cloudLow } : null;
+}
+
+/** Les moments à regarder le ciel n'ont de sens que si les nuages le permettent. */
+const skyVerdict = (c: { total: number; low: number } | null, lowOnly = false): { skip: boolean; note: string } => {
+  if (!c) return { skip: false, note: "" };
+  const v = lowOnly ? c.low : c.total;
+  if (v >= 85) return { skip: true, note: "" };
+  return { skip: false, note: v >= 50 ? ` Cloud forecast ${Math.round(v)}%, it may be hidden.` : "" };
+};
+
 export function moments(i: MomentInputs, now = new Date()): Moment[] {
   const out: Moment[] = [];
   const nowMs = now.getTime();
@@ -39,15 +54,18 @@ export function moments(i: MomentInputs, now = new Date()): Moment[] {
     out.push({ key: `sunrise-${s.date}`, at: s.time, kind: "sun", priority: 3, title: `Sunrise worth getting up for, ${hm(Date.parse(s.time))}`, detail: `${s.score}/10. ${s.why}.` });
   }
   const m = moonriseOverSea(new Date(nowMs - 30 * 60e3));
-  if (m && within(m.time.getTime())) {
+  // Lever de Lune sur la mer : ce sont les nuages bas sur l'horizon qui le cachent.
+  const mv = m ? skyVerdict(cloudAt(i.weather, m.time.getTime()), true) : null;
+  if (m && mv && !mv.skip && within(m.time.getTime())) {
     out.push({ key: `moon-${day(m.time)}`, at: m.time.toISOString(), kind: "moon", priority: 3,
-      title: `Moonrise over the sea at ${hm(m.time)}`, detail: `${Math.round(m.illumination * 100)}% lit, rising ${compass(m.azimuth)}. Look east from the beach.` });
+      title: `Moonrise over the sea at ${hm(m.time)}`, detail: `${Math.round(m.illumination * 100)}% lit, rising ${compass(m.azimuth)}. Look east from the beach.${mv.note}` });
   }
   for (const p of i.iss?.passes ?? []) {
     const t = Date.parse(p.start);
-    if (p.maxAlt >= 30 && within(t)) {
+    const v = skyVerdict(cloudAt(i.weather, Date.parse(p.max)));
+    if (p.maxAlt >= 30 && within(t) && !v.skip) {
       out.push({ key: `iss-${p.start}`, at: p.start, kind: "iss", priority: 2,
-        title: `Space Station overhead at ${hm(t)}`, detail: `Bright moving star from ${compass(p.startAz)} to ${compass(p.endAz)}, up to ${p.maxAlt}° high, ${p.durationMin} min.` });
+        title: `Space Station overhead at ${hm(t)}`, detail: `Bright moving star from ${compass(p.startAz)} to ${compass(p.endAz)}, up to ${p.maxAlt}° high, ${p.durationMin} min.${v.note}` });
     }
   }
   const sw = i.space;

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { bz2Streams, clearRef, cloudAt, decodeHead, decodeHsd, geosPixel, localGrid, localRef, render, sunriseInSlot } from "../src/sources/himawari";
+import { slotFile, bz2Streams, clearRef, cloudAt, decodeHead, decodeHsd, geosPixel, localGrid, localRef, render, sunriseInSlot } from "../src/sources/himawari";
 
 // Début réel du segment 9 de la bande 13 de Himawari-9, 21/11/2026 12:00 UTC (archive NOAA sur AWS),
 // réduit aux deux premiers flux bzip2 : exactement ce que le hub décode en production.
@@ -34,6 +34,14 @@ describe("Himawari-9, bande 13 (fichier réel)", () => {
     expect(c.total).toBe(c.low + c.mid + c.high);
     const png = render(g, local);
     expect([...png.subarray(0, 8)]).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  });
+});
+
+describe("archive NOAA", () => {
+  it("construit le nom exact du fichier d'un créneau", () => {
+    const f = slotFile("AHI-L1b-FLDK/2026/11/21/1200/", "0910");
+    expect(f.url).toBe("https://noaa-himawari9.s3.amazonaws.com/AHI-L1b-FLDK/2026/11/21/1200/HS_H09_20261121_1200_B13_FLDK_R20_S0910.DAT.bz2");
+    expect(f.at.toISOString()).toBe("2026-11-21T12:00:00.000Z");
   });
 });
 

@@ -240,6 +240,15 @@ export function render(g: Grid, ref: Float32Array): Buffer {
   return png(g.size, g.size, gray, alpha);
 }
 
+/** « AHI-L1b-FLDK/2026/11/21/1200/ » → URL du fichier de la bande 13 et heure du créneau. */
+export function slotFile(slot: string, segment: string): { url: string; at: Date } {
+  const [, y, mo, d, hm] = slot.split("/");
+  return {
+    url: `${BUCKET}/${slot}HS_H09_${y}${mo}${d}_${hm}_B13_FLDK_R20_S${segment}.DAT.bz2`,
+    at: new Date(Date.UTC(+y, +mo - 1, +d, +hm.slice(0, 2), +hm.slice(2))),
+  };
+}
+
 async function latestSlot(now: Date): Promise<string> {
   for (const back of [0, 1]) {
     const d = new Date(now.getTime() - back * 86400e3).toISOString().slice(0, 10).replace(/-/g, "/");
@@ -258,10 +267,9 @@ export interface SatelliteState { data: Satellite; png: Buffer }
 
 /** Image et nuages autour de Maroubra pour un créneau (« AHI-L1b-FLDK/2026/11/21/1200/ »). */
 export async function satelliteAt(slot: string, sunriseAz: number | null): Promise<SatelliteState> {
-  const [, , y, mo, d, hm] = slot.split("/");
   const segs: Hsd[] = [];
   for (const s of SEGMENTS) {
-    const bz = new Uint8Array(await fetchBytes(`${BUCKET}/${slot}HS_H09_${y}${mo}${d}_${hm}_B13_FLDK_R20_S${s}.DAT.bz2`, 60_000));
+    const bz = new Uint8Array(await fetchBytes(slotFile(slot, s).url, 60_000));
     segs.push(decodeHsd(decodeHead(bz)));
   }
   const grid = localGrid(segs);
@@ -272,7 +280,7 @@ export async function satelliteAt(slot: string, sunriseAz: number | null): Promi
     const dx = (lo - SITE.lon) * 111.32 * Math.cos((SITE.lat * Math.PI) / 180), dy = (la - SITE.lat) * 110.57;
     return { km, cloud: cloudAt(grid, ref, dx, dy) };
   });
-  const at = new Date(Date.UTC(+y, +mo - 1, +d, +hm.slice(0, 2), +hm.slice(2))).toISOString();
+  const at = slotFile(slot, SEGMENTS[0]).at.toISOString();
   return {
     png: render(grid, ref),
     data: {
@@ -302,8 +310,7 @@ export function satelliteCollector(opts: { onImage: (png: Buffer) => void; onSun
     run: async ({ now }) => {
       const slot = await latestSlot(now);
       if (slot === last && lastData) return lastData;
-      const [, , y, mo, d, hm] = slot.split("/");
-      const slotAt = new Date(Date.UTC(+y, +mo - 1, +d, +hm.slice(0, 2), +hm.slice(2)));
+      const slotAt = slotFile(slot, SEGMENTS[0]).at;
       const judged = sunriseInSlot(slotAt);
       const az = judged?.az ?? (() => { const r = riseSet(A.Body.Sun, now).rise; return r ? horizontal(A.Body.Sun, r).az : null; })();
       const s = await satelliteAt(slot, az);

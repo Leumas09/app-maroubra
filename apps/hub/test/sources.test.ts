@@ -187,3 +187,15 @@ describe("actualités", () => {
     expect(keywordLocal(items[2].title)).toBe(false);
   });
 });
+
+describe("moments du ciel et nuages", () => {
+  const now = new Date("2026-11-14T08:00:00Z");
+  const pass = { start: "2026-11-14T09:00:00Z", max: "2026-11-14T09:03:00Z", end: "2026-11-14T09:06:00Z", maxAlt: 60, startAz: 300, endAz: 120, durationMin: 6 };
+  const w = (cloud: number) => ({ current: {}, daily: [], rainPast24h: 0, hourly: [{ t: Date.parse("2026-11-14T09:00:00Z") / 1000, cloud, cloudLow: cloud, precip: 0, pop: 0 }] }) as never;
+  it("annonce le passage de l'ISS par ciel dégagé, le signale nuageux, le tait couvert", () => {
+    const iss = { passes: [pass], tleEpoch: "" };
+    expect(moments({ iss, weather: w(10) }, now).find((m) => m.kind === "iss")?.detail).not.toMatch(/Cloud/);
+    expect(moments({ iss, weather: w(60) }, now).find((m) => m.kind === "iss")?.detail).toMatch(/Cloud forecast 60%/);
+    expect(moments({ iss, weather: w(95) }, now).find((m) => m.kind === "iss")).toBeUndefined();
+  });
+});

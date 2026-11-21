@@ -136,7 +136,7 @@ export function Home({ now, sky, brief, beach, weather, buoy, marine, sunrise, s
         { label: "Water", value: water != null ? `${water.toFixed(1)}°` : "n/a", sub: "sea surface", level: water != null ? (water - 12) / 14 : null },
       ];
 
-  const headline = night && sky ? skyLede(sky) : brief ?? (sky ? skyLede(sky) : "Reading the sky and the sea…");
+  const headline = night && sky ? skyLede(sky, w) : brief ?? (sky ? skyLede(sky, w) : "Reading the sky and the sea…");
   const sub = night ? brief : null;
 
   return (
@@ -156,7 +156,7 @@ export function Home({ now, sky, brief, beach, weather, buoy, marine, sunrise, s
 
       {sky ? (
         <CenteredScroll className="band chart-scroll" focus={focusOf(sky.tracks.sun, sky.tracks.moon)}>
-          <HorizonChart sun={sky.tracks.sun} moon={sky.tracks.moon} planets={sky.tracks.planets} summary={skyLede(sky)} />
+          <HorizonChart sun={sky.tracks.sun} moon={sky.tracks.moon} planets={sky.tracks.planets} summary={skyLede(sky, w)} />
         </CenteredScroll>
       ) : <div className="band" style={{ minHeight: 200 }} aria-busy="true" />}
 
