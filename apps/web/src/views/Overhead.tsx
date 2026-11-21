@@ -55,7 +55,7 @@ function Map({ f, sel, pick }: { f: Flights; sel: string | null; pick: (hex: str
           </g>
         );
       })}
-      <text x={W - 10} y={H - 10} textAnchor="end" fontSize="11" fill="var(--muted)">Map © OpenStreetMap contributors. Positions: adsb.lol</text>
+      <text x={W - 10} y={H - 10} textAnchor="end" fontSize="11" fill="var(--muted)">Coast: GSHHG. Positions: adsb.lol</text>
     </svg>
   );
 }

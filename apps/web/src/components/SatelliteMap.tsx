@@ -21,7 +21,7 @@ export function SatelliteMap({ s }: { s: Satellite }) {
         <text x={c + 36} y={c - 38} fontSize="7" fill="var(--sat-coast)">50 km</text>
         <circle cx={c} cy={c} r="2.6" fill="var(--alert)" stroke="white" strokeWidth="0.8" />
         <text x={c + 5} y={c + 2.5} fontSize="8" fontWeight="700" fill="white" stroke="var(--sat-sea)" strokeWidth="2" paintOrder="stroke">Maroubra</text>
-        <text x={SPAN - 4} y={SPAN - 4} textAnchor="end" fontSize="6" fill="var(--sat-coast)">Himawari-9 (JMA) via NOAA. Coast © OpenStreetMap</text>
+        <text x={SPAN - 4} y={SPAN - 4} textAnchor="end" fontSize="6" fill="var(--sat-coast)">Himawari-9 (JMA) via NOAA. Coast: GSHHG</text>
       </g>
     </svg>
   );
