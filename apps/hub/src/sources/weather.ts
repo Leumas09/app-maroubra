@@ -1,7 +1,8 @@
 // Prévisions Open-Meteo (meilleure combinaison de modèles pour Sydney, dont BOM ACCESS-G),
 // et observation METAR de l'aéroport de Sydney (aviationweather.gov, NOAA).
-import type { Metar, Weather, WeatherWarnings } from "@maroubra/core";
+import type { Metar, Verification, Weather, WeatherWarnings } from "@maroubra/core";
 import { XMLParser } from "fast-xml-parser";
+import { applyCorrection } from "../derive/correct";
 import { SITE } from "../config";
 import { fetchJson, fetchText } from "../http";
 import type { Collector } from "../collector";
@@ -60,18 +61,30 @@ export const weather: Collector<Weather> = {
   id: "weather",
   everyMs: 15 * 60e3,
   staleAfterMs: 2 * 3600e3,
-  run: async () => parseWeather(await fetchJson(weatherUrl())),
+  // Correction locale appliquée seulement quand le Track record en ligne l'a validée.
+  run: async ({ store, now }) => applyCorrection(parseWeather(await fetchJson(weatherUrl()), now.getTime()), store.data<Verification>("verify"), now.getTime()),
 };
 
 interface RawMetar { icaoId: string; obsTime: number; temp?: number; dewp?: number; wdir?: number | string; wspd?: number; wgst?: number; visib?: number | string; altim?: number; rawOb: string }
 
+/**
+ * Pluie dans un METAR : groupe de temps présent (-RA, SHRA, TSRA, DZ...) ou temps récent (RERA, RESHRA...),
+ * avant les remarques. « VCSH » (averses au voisinage) ne compte pas : il ne pleut pas sur la station.
+ */
+export function metarRain(raw: string): boolean {
+  const body = raw.split(/\sRMK\s/)[0];
+  return body.split(/\s+/).some((tok) => /^(?:[-+]|RE)?(?:TS|SH)?(?:RA|DZ|GR|GS)+$/.test(tok));
+}
+
 export function parseMetar(list: RawMetar[]): Metar {
-  const m = [...list].sort((a, b) => b.obsTime - a.obsTime)[0];
+  const sorted = [...list].sort((a, b) => b.obsTime - a.obsTime);
+  const m = sorted[0];
   if (!m) throw new Error("no METAR");
   return {
     station: m.icaoId, t: m.obsTime, temp: m.temp ?? null, dewpoint: m.dewp ?? null,
     windDir: typeof m.wdir === "number" ? m.wdir : null, windKt: m.wspd ?? null, gustKt: m.wgst ?? null,
-    visibility: m.visib == null ? null : String(m.visib), qnh: m.altim ?? null, raw: m.rawOb,
+    visibility: m.visib == null ? null : String(m.visib), qnh: m.altim ?? null, raw: m.rawOb, rain: metarRain(m.rawOb),
+    recent: sorted.map((o) => ({ t: o.obsTime, temp: o.temp ?? null, windKt: o.wspd ?? null, windDir: typeof o.wdir === "number" ? o.wdir : null, rain: metarRain(o.rawOb), raw: o.rawOb })),
   };
 }
 
@@ -80,6 +93,38 @@ export const metar: Collector<Metar> = {
   everyMs: 10 * 60e3,
   staleAfterMs: 90 * 60e3,
   run: async () => parseMetar(await fetchJson("https://aviationweather.gov/api/data/metar?ids=YSSY&format=json&hours=3")),
+};
+
+/** Prévision au point exact d'un juge (aéroport, bouée) : archivée pour une vérification sans décalage de lieu. */
+export interface PointForecast {
+  lat: number;
+  lon: number;
+  hourly: { t: number; temp?: number | null; wind?: number | null; gust?: number | null; pop?: number | null; precip?: number | null; hs?: number | null }[];
+}
+
+export const YSSY_POINT = { lat: -33.9461, lon: 151.1772 };
+
+export function parsePointWeather(j: { hourly: Record<string, (number | null)[]> & { time: number[] } }, now = Date.now()): PointForecast {
+  const h = j.hourly;
+  return {
+    ...YSSY_POINT,
+    hourly: h.time.map((t, i) => ({ t, temp: h.temperature_2m[i], wind: h.wind_speed_10m[i], gust: h.wind_gusts_10m[i], pop: h.precipitation_probability[i], precip: h.precipitation[i] }))
+      .filter((x) => x.t >= now / 1000 - 3600),
+  };
+}
+
+/** La même prévision Open-Meteo que l'écran, mais au point de l'aéroport, où le METAR la juge. */
+export const airportForecast: Collector<PointForecast> = {
+  id: "fc-airport",
+  everyMs: 30 * 60e3,
+  staleAfterMs: 3 * 3600e3,
+  run: async () => {
+    const q = new URLSearchParams({
+      latitude: String(YSSY_POINT.lat), longitude: String(YSSY_POINT.lon), timezone: "UTC", timeformat: "unixtime", forecast_days: "3",
+      wind_speed_unit: "kmh", hourly: "temperature_2m,wind_speed_10m,wind_gusts_10m,precipitation_probability,precipitation",
+    });
+    return parsePointWeather(await fetchJson(`https://api.open-meteo.com/v1/forecast?${q}`));
+  },
 };
 
 // Avertissements du Bureau of Meteorology : flux RSS public de NSW (usage personnel non commercial, crédit BOM).

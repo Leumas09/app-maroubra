@@ -1,8 +1,8 @@
 // Avions autour de Maroubra : positions ADS-B d'adsb.fi (open data, une requête par seconde autorisée),
 // adsb.lol en secours (500 appels par jour sans clé : au plus toutes les 5 min), routes d'adsbdb.com.
 // Un grand relevé de 250 NM toutes les 30 s alimente l'historique des traces (history.ts).
-// On déduit le mode de pistes de Sydney, le couvre-feu et les survols imminents.
-import type { Aircraft, Airport, Flights } from "@maroubra/core";
+// On déduit le mode de pistes de Sydney, le couvre-feu et les survols imminents, jugés sur la trace réelle.
+import type { Aircraft, Airport, Flights, OverheadOutcome } from "@maroubra/core";
 import { airlineOf } from "./airlines";
 import { SITE } from "../config";
 import { bearingDeg, destination, distanceKm } from "../geo";
@@ -86,9 +86,22 @@ export function currentLeg(airports: RawAirport[], lat: number, lon: number): { 
   return { from, to, progress: { pct: Math.round((flown / (flown + left)) * 1000) / 10, flownKm: Math.round(flown), leftKm: Math.round(left) } };
 }
 
+/**
+ * Avion en manoeuvre d'arrivée : sous 9 000 ft, sans monter, à moins de 45 km de l'aéroport et pas aligné
+ * sur la finale de la piste 25 (la seule qui passe au-dessus de Maroubra). Le contrôle le fait encore
+ * tourner (vent arrière, base) : prolonger sa trajectoire en ligne droite ne vaut rien. Règle établie
+ * sur l'enregistrement ADS-B du 21/11/2026 avant 20:50 UTC, jugée ensuite sur la suite (bench/results).
+ */
+export function inArrivalManoeuvre(a: { lat: number; lon: number; track: number | null; altFt?: number | null; vrate?: number | null }): boolean {
+  if (a.altFt == null || a.altFt >= 9000 || (a.vrate ?? 0) > 300) return false;
+  if (distanceKm(a.lat, a.lon, YSSY.lat, YSSY.lon) > 45) return false;
+  return !(a.track != null && a.track >= 230 && a.track <= 270);
+}
+
 /** Survol prévu : on prolonge la trajectoire en ligne droite 8 minutes et on cherche le passage le plus proche. */
-export function predictOverhead(a: { lat: number; lon: number; track: number | null; speedKt: number | null }, home = SITE): Aircraft["overhead"] {
+export function predictOverhead(a: { lat: number; lon: number; track: number | null; speedKt: number | null; altFt?: number | null; vrate?: number | null }, home = SITE): Aircraft["overhead"] {
   if (a.track == null || !a.speedKt || a.speedKt < 60) return null;
+  if (inArrivalManoeuvre(a)) return null;
   const kmPerMin = (a.speedKt * 1.852) / 60;
   let best = { d: Infinity, m: 0 };
   for (let m = 0; m <= 8; m += 0.25) {
@@ -153,13 +166,66 @@ export function normalize(raw: RawAc[], routes: Map<string, object>, trails: Map
           ? { codes: route._airport_codes_iata ?? route.airport_codes, from: airport(leg?.from ?? route._airports[0]), to: airport(leg?.to ?? route._airports.at(-1)) }
           : null,
         progress: leg?.progress ?? null,
-        overhead: onGround ? null : predictOverhead({ lat, lon, track: r.track ?? null, speedKt }),
+        overhead: onGround ? null : predictOverhead({ lat, lon, track: r.track ?? null, speedKt, altFt: typeof r.alt_baro === "number" ? r.alt_baro : null, vrate: r.baro_rate ?? r.geom_rate ?? null }),
         trail: history ? history.recent(r.hex, now) : trails.get(r.hex) ?? [],
         tookOffAt: history?.tookOffAt(r.hex) ?? null,
       };
       return ac;
     })
     .sort((a, b) => a.distKm - b.distKm);
+}
+
+/** Distance minimale (km) entre la maison et le segment parcouru entre deux positions (plan local). */
+export function segmentMinKm(a: [number, number], b: [number, number], home = SITE): number {
+  const kx = 111.32 * Math.cos((home.lat * Math.PI) / 180), ky = 110.57;
+  const ax = (a[1] - home.lon) * kx, ay = (a[0] - home.lat) * ky, bx = (b[1] - home.lon) * kx, by = (b[0] - home.lat) * ky;
+  const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+  const t = l2 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / l2)) : 0;
+  return Math.hypot(ax + t * dx, ay + t * dy);
+}
+
+/**
+ * Juge des annonces « overhead in N min » : chaque annonce est suivie sur la trace ADS-B réelle de l'avion
+ * jusqu'à 3 minutes après l'heure prévue. Réussie si l'avion est passé à moins de 1,5 km de la maison.
+ * Un avion perdu par le réseau avant l'heure prévue n'est pas compté (on ne sait pas).
+ */
+export class OverheadJudge {
+  private pending = new Map<string, { at: number; inMin: number; due: number; minKm: number; last: [number, number]; seen: number; callsign: string | null }>();
+  private recent = new Map<string, number>();
+  announced = 0;
+  hits = 0;
+  readonly since: string;
+  constructor(now = Date.now(), private hitKm = 1.5) { this.since = new Date(now).toISOString(); }
+
+  update(acs: Aircraft[], now = Date.now()): OverheadOutcome[] {
+    const out: OverheadOutcome[] = [];
+    for (const a of acs) {
+      if (a.onGround) continue;
+      const p = this.pending.get(a.hex);
+      if (p) {
+        p.minKm = Math.min(p.minKm, segmentMinKm(p.last, [a.lat, a.lon]));
+        p.last = [a.lat, a.lon];
+        p.seen = now;
+      } else if (a.overhead && a.overhead.inMin >= 1 && !(now - (this.recent.get(a.hex) ?? -Infinity) <= 20 * 60e3)) {
+        this.pending.set(a.hex, { at: now, inMin: a.overhead.inMin, due: now + a.overhead.inMin * 60e3, minKm: a.distKm, last: [a.lat, a.lon], seen: now, callsign: a.callsign });
+        this.recent.set(a.hex, now);
+      }
+    }
+    for (const [hex, p] of this.pending) {
+      const lost = now - p.seen > 60e3;
+      if (now > p.due + 3 * 60e3 || lost) {
+        this.pending.delete(hex);
+        const resolved = p.minKm <= this.hitKm || p.seen >= p.due + 60e3;
+        if (!resolved) continue; // perdu avant l'heure prévue : on ne sait pas
+        const hit = p.minKm <= this.hitKm;
+        this.announced++;
+        if (hit) this.hits++;
+        out.push({ hex, callsign: p.callsign, at: new Date(p.at).toISOString(), inMin: p.inMin, minKm: Math.round(p.minKm * 100) / 100, hit });
+      }
+    }
+    for (const [hex, t] of this.recent) if (now - t > 60 * 60e3) this.recent.delete(hex);
+    return out;
+  }
 }
 
 /** État partagé : routes, historique des traces et recherche de routes. */
@@ -199,8 +265,9 @@ export function areaFinder(shared: FlightShared, get = fetchFi) {
   };
 }
 
-export function flightsCollector(shared: FlightShared = flightShared()): Collector<Flights> {
+export function flightsCollector(shared: FlightShared = flightShared(), onOutcome: (o: OverheadOutcome) => void = () => {}): Collector<Flights> {
   const { routes, history, lookup } = shared;
+  const judge = new OverheadJudge();
   const seen = new Map<string, string>(); // hex vu aujourd'hui (jour de Sydney)
   let lastFallback = 0;
   let lastWide = 0;
@@ -233,7 +300,8 @@ export function flightsCollector(shared: FlightShared = flightShared()): Collect
       for (const [hex, d] of seen) if (d !== day) seen.delete(hex);
       const aircraft = normalize(raw, routes, new Map(), now.getTime(), history);
       for (const a of aircraft) if (a.distKm <= 10 && !a.onGround) seen.set(a.hex, day);
-      return { aircraft, runway: runwayMode(aircraft), curfew: isCurfew(now), seenToday: seen.size, source };
+      for (const o of judge.update(aircraft, now.getTime())) onOutcome(o);
+      return { aircraft, runway: runwayMode(aircraft), curfew: isCurfew(now), seenToday: seen.size, source, judged: { announced: judge.announced, hits: judge.hits, since: judge.since } };
     },
   };
 }

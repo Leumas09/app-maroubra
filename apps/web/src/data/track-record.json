@@ -1,18 +1,18 @@
 {
-  "generated": "2026-10-31",
+  "generated": "2026-11-21",
   "checks": [
     {
       "name": "Temperature at Sydney Airport",
       "judge": "Observations, held-out period",
-      "target": "error \u221225% vs raw",
-      "result": "\u221234.3% (95%: 29.4 to 38.9)",
+      "target": "error −25% vs raw",
+      "result": "−34.3% (95%: 29.4 to 38.9)",
       "pass": true
     },
     {
       "name": "Wind at Sydney Airport",
       "judge": "Observations, held-out period",
-      "target": "error \u221225% vs raw",
-      "result": "\u221215.9% (95%: 12.6 to 19.1)",
+      "target": "error −25% vs raw",
+      "result": "−15.9% (95%: 12.6 to 19.1)",
       "pass": false
     },
     {
@@ -47,8 +47,8 @@
     {
       "name": "Planet positions, 2027 evenings",
       "judge": "Skyfield + JPL DE421",
-      "target": "within 1\u2032",
-      "result": "worst 0.23\u2032",
+      "target": "within 1′",
+      "result": "worst 0.23′",
       "pass": true
     },
     {
@@ -57,12 +57,40 @@
       "target": "same passes, within 20 s",
       "result": "3 of 3 passes, identical at 10 s sampling",
       "pass": true
+    },
+    {
+      "name": "Himawari-9 navigation",
+      "judge": "Satpy reader (bench) and OpenStreetMap coastline",
+      "target": "Maroubra on the right pixel, coast within 2 km",
+      "result": "same pixel line 4459; land and sea contrast peaks within 1.5 km",
+      "pass": true
+    },
+    {
+      "name": "Rain within 30 min from satellite images alone",
+      "judge": "Sydney Airport METAR, 14 to 21 Nov 2026, 983 cases",
+      "target": "beat persistence",
+      "result": "CSI 0.35 at best vs 0.47 for persistence: not shown on screen",
+      "pass": false
+    },
+    {
+      "name": "Cloud layers from satellite infrared alone",
+      "judge": "Sydney Airport ceilometer (METAR), 392 reports, 14 to 21 Nov 2026",
+      "target": "good enough to judge the sunrise score",
+      "result": "correlation 0.19 for low cloud, 0.44 for mid and high: not used as a judge",
+      "pass": false
+    },
+    {
+      "name": "Surf near the shore vs offshore swell",
+      "judge": "Collaroy-Narrabeen nearshore buoy (14 m deep) vs Sydney offshore buoy, 17,722 paired readings, Apr 2024 to Nov 2026",
+      "target": "measured, not assumed",
+      "result": "0.83 from the NE, 0.78 E, 0.62 SE, 0.46 S (the old fixed 0.8 overstated southerly swell)",
+      "pass": true
     }
   ],
   "verifications": [
     {
       "title": "Temperature at Sydney Airport",
-      "unit": "\u00b0C",
+      "unit": "°C",
       "best": "learned correction",
       "gain": 0.3428708130310615,
       "ci": [

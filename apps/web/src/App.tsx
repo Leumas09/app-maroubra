@@ -1,17 +1,49 @@
-import { useEffect, useMemo, useState } from "react";
-import type { AirQuality, Beach as BeachData, BeachStatus, Brief, Buoy, Fires, Flights, Iss, Marine, Metar, Moment, News as NewsData, SpaceWeather, Sunrise, Weather as WeatherData, WeatherWarnings } from "@maroubra/core";
+import { Component, lazy as reactLazy, Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
+import type * as React from "react";
+import type { AirQuality, Beach as BeachData, BeachStatus, Brief, Buoy, Fires, Flights, Iss, Marine, Metar, Moment, News as NewsData, Satellite, SpaceWeather, Sunrise, Verification, Weather as WeatherData, WeatherWarnings } from "@maroubra/core";
 import { data, entry, isDemo, useLive } from "./lib/live";
 import type { SkyModel } from "./lib/sky-model";
 import { loadTide, type TideTable } from "./lib/tide";
-import { Beach } from "./views/Beach";
 import { Home } from "./views/Home";
-import { FireAir } from "./views/FireAir";
-import { News } from "./views/News";
-import { Overhead } from "./views/Overhead";
-import { Settings } from "./views/Settings";
 import { Sky } from "./views/Sky";
-import { TrackRecord } from "./views/TrackRecord";
-import { Weather } from "./views/Weather";
+/** Une vue qui ne peut pas se charger (hors ligne) n'éteint pas tout l'écran. */
+class ViewBoundary extends Component<{ view: string; children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  componentDidUpdate(prev: { view: string }) { if (prev.view !== this.props.view && this.state.failed) this.setState({ failed: false }); }
+  render() {
+    if (!this.state.failed) return this.props.children;
+    return (
+      <div className="card">
+        <p className="lede" style={{ margin: "0 0 12px" }}>This view could not load. The network may be down.</p>
+        <button className="btn" onClick={() => location.reload()}>Retry</button>
+      </div>
+    );
+  }
+}
+
+// Vues secondaires chargées à la demande : l'accueil s'affiche sans attendre les cartes ni les tableaux.
+// Après un déploiement, un écran resté ouvert peut demander un fichier qui n'existe plus : on recharge
+// la page une fois (la nouvelle version arrive), sans boucle si le réseau est vraiment coupé.
+function lazy<T extends Record<string, unknown>>(load: () => Promise<T>, name: keyof T) {
+  return reactLazy(() => load().then((m) => {
+    try { sessionStorage.removeItem("mb.reloaded"); } catch { /* ignoré */ }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return { default: m[name] as React.ComponentType<any> };
+  }).catch((err) => {
+    let again = false;
+    try { again = !sessionStorage.getItem("mb.reloaded"); sessionStorage.setItem("mb.reloaded", "1"); } catch { /* ignoré */ }
+    if (again) location.reload();
+    throw err;
+  }));
+}
+const Beach = lazy(() => import("./views/Beach"), "Beach") as unknown as typeof import("./views/Beach")["Beach"];
+const FireAir = lazy(() => import("./views/FireAir"), "FireAir") as unknown as typeof import("./views/FireAir")["FireAir"];
+const News = lazy(() => import("./views/News"), "News") as unknown as typeof import("./views/News")["News"];
+const Overhead = lazy(() => import("./views/Overhead"), "Overhead") as unknown as typeof import("./views/Overhead")["Overhead"];
+const Settings = lazy(() => import("./views/Settings"), "Settings") as unknown as typeof import("./views/Settings")["Settings"];
+const TrackRecord = lazy(() => import("./views/TrackRecord"), "TrackRecord") as unknown as typeof import("./views/TrackRecord")["TrackRecord"];
+const Weather = lazy(() => import("./views/Weather"), "Weather") as unknown as typeof import("./views/Weather")["Weather"];
 
 type View = "home" | "weather" | "beach" | "sky" | "overhead" | "fire" | "news" | "track" | "settings";
 const VIEWS: View[] = ["home", "weather", "beach", "sky", "overhead", "fire", "news", "track", "settings"];
@@ -105,9 +137,16 @@ export function App() {
   const urgentFire = activeFires.some((x) => x.alert === "Emergency Warning" || x.alert === "Watch and Act" || x.smokeTowardUs);
 
   const serverMoments = data<Moment[]>(snap, "moments") ?? [];
+  // Les moments du ciel calculés ici : la prévision de nuages dit s'ils valent la peine.
+  const cloudNote = (m: { at: Date; kind: string; detail: string }) => {
+    if (!["dark", "planet", "moon"].includes(m.kind)) return m.detail;
+    const h = weather?.data?.hourly.find((x) => Math.abs(x.t * 1000 - m.at.getTime()) <= 30 * 60e3);
+    const c = h ? (m.kind === "moon" ? h.cloudLow : h.cloud) : null;
+    return c != null && c >= 70 ? `${m.detail}. Cloudy (${Math.round(c)}%), likely hidden` : m.detail;
+  };
   const moments = [
     ...serverMoments.map((m) => ({ at: new Date(m.at), title: m.title, detail: m.detail, urgent: m.priority === 1 })),
-    ...(sky?.moments ?? []).filter((m) => !serverMoments.some((s) => s.title.split(" at ")[0] === m.title)).map((m) => ({ ...m, urgent: false })),
+    ...(sky?.moments ?? []).filter((m) => !serverMoments.some((s) => s.title.split(" at ")[0] === m.title)).map((m) => ({ ...m, detail: cloudNote(m), urgent: false })),
   ].filter((m) => m.at.getTime() >= now.getTime() - 15 * 60e3).sort((x, y) => Number(y.urgent) - Number(x.urgent) || x.at.getTime() - y.at.getTime()).slice(0, 8);
 
   const link = (v: View, label: string, opts: { alert?: string } = {}) => (
@@ -141,15 +180,19 @@ export function App() {
           {isDemo(snap) && <span className="pill miss">Sample data for testing, not live</span>}
           {snap && !connected && <span className="pill wait">Reconnecting…</span>}
         </div>
+        <ViewBoundary view={current}>
+        <Suspense fallback={<div className="card" style={{ minHeight: 320 }} aria-busy="true" />}>
         {current === "home" && <Home now={now} sky={sky} brief={brief?.text ?? null} beach={beach} beachStatus={beachStatus} weather={weather} buoy={buoy} marine={entry<Marine>(snap, "marine")} sunrise={entry<Sunrise>(snap, "sunrise")} space={entry<SpaceWeather>(snap, "space")} moments={moments} />}
-        {current === "weather" && <Weather e={weather} metar={entry<Metar>(snap, "metar")} air={air} warnings={entry<WeatherWarnings>(snap, "warnings")} night={!!night} now={now} />}
-        {current === "beach" && <Beach e={beach} status={beachStatus} tide={tide} now={now} buoy={buoy} marine={entry<Marine>(snap, "marine")} demo={isDemo(snap)} />}
+        {current === "weather" && <Weather e={weather} metar={entry<Metar>(snap, "metar")} air={air} warnings={entry<WeatherWarnings>(snap, "warnings")} sat={entry<Satellite>(snap, "satellite")} night={!!night} now={now} />}
+        {current === "beach" && <Beach e={beach} status={beachStatus} tide={tide} now={now} buoy={buoy} near={entry<Buoy>(snap, "buoy-near")} marine={entry<Marine>(snap, "marine")} demo={isDemo(snap)} />}
         {current === "sky" && (sky ? <Sky s={sky} iss={entry<Iss>(snap, "iss")} space={entry<SpaceWeather>(snap, "space")} sunrise={entry<Sunrise>(snap, "sunrise")} hours={weather?.data?.hourly ?? null} /> : <div className="card" style={{ minHeight: 320 }} aria-busy="true" />)}
         {current === "overhead" && <Overhead e={flights} night={!!night} demo={isDemo(snap)} />}
         {current === "fire" && <FireAir fires={fires} />}
         {current === "news" && <News e={news} now={now} />}
-        {current === "track" && <TrackRecord />}
+        {current === "track" && <TrackRecord live={entry<Verification>(snap, "verify")} />}
         {current === "settings" && <Settings ambient={ambient} setAmbient={setAmbient} />}
+        </Suspense>
+        </ViewBoundary>
       </main>
     </div>
   );

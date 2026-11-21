@@ -1,4 +1,5 @@
 // Accueil (direction B « Instrument ») : l'heure, une phrase, le ciel tracé, les niveaux et les prochains moments.
+import { useState } from "react";
 import type { Beach, BeachStatus, Buoy, Marine, SourceEntry, SpaceWeather, Sunrise, Weather } from "@maroubra/core";
 import { BeachStatusLine } from "../components/beach-status";
 import { BusLine } from "../components/BusLine";
@@ -34,6 +35,51 @@ function Gauge({ g }: { g: Level }) {
       </div>
       <div className="gauge-label">{g.label}</div>
       <div className="gauge-sub">{g.sub}</div>
+    </div>
+  );
+}
+
+const localDay = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "Australia/Sydney" }).format(d);
+const localHour = (d: Date) => Number(new Intl.DateTimeFormat("en-AU", { hour: "numeric", hourCycle: "h23", timeZone: "Australia/Sydney" }).format(d));
+const store = {
+  get: (k: string) => { try { return localStorage.getItem(k); } catch { return null; } },
+  set: (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* stockage indisponible */ } },
+};
+function voterId(): string {
+  let id = store.get("mb.voter");
+  if (!id) { id = crypto.randomUUID?.() ?? String(Math.random()).slice(2); store.set("mb.voter", id); }
+  return id;
+}
+
+/**
+ * Le juge du score de lever de soleil : chaque matin, la famille dit si le lever valait le coup.
+ * Visible une fois le Soleil levé et jusqu'à 11 h, une fois par appareil.
+ */
+function SunriseVote({ now, sunAlt }: { now: Date; sunAlt: number }) {
+  // L'écran ambiant reste ouvert des jours : tout est rapporté au jour courant, pas au montage.
+  const day = localDay(now);
+  const [voted, setVoted] = useState(() => store.get("mb.voted"));
+  const [msg, setMsg] = useState<{ day: string; text: string; retry?: boolean } | null>(null);
+  const shown = msg?.day === day ? msg : null;
+  if (sunAlt < 3 || localHour(now) >= 11 || (voted === day && !shown)) return null;
+  const done = (text: string) => { store.set("mb.voted", day); setVoted(day); setMsg({ day, text }); };
+  const vote = async (value: number | null) => {
+    if (value == null) { done("No problem. Ask again tomorrow."); return; }
+    const r = await fetch("/api/vote", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ date: day, value, voter: voterId() }) }).catch(() => null);
+    if (r?.ok) done("Thanks. Your vote checks the sunrise score in the Track record.");
+    else setMsg({ day, text: "Could not save the vote. Try again?", retry: true });
+  };
+  return (
+    <div className="vote" role="group" aria-labelledby="vote-q">
+      <span id="vote-q">{shown?.text ?? "This morning's sunrise: worth getting up for?"}</span>
+      {(!shown || shown.retry) && (
+        <span className="vote-buttons">
+          <button className="btn" onClick={() => vote(2)}>Yes</button>
+          <button className="btn ghost" onClick={() => vote(1)}>So-so</button>
+          <button className="btn ghost" onClick={() => vote(0)}>No</button>
+          <button className="btn ghost" onClick={() => vote(null)}>Didn't see it</button>
+        </span>
+      )}
     </div>
   );
 }
@@ -100,7 +146,7 @@ export function Home({ now, sky, brief, beach, beachStatus, weather, buoy, marin
         { label: "Water", value: water != null ? `${water.toFixed(1)}°` : "n/a", sub: "sea surface", level: water != null ? (water - 12) / 14 : null },
       ];
 
-  const headline = night && sky ? skyLede(sky) : brief ?? (sky ? skyLede(sky) : "Reading the sky and the sea…");
+  const headline = night && sky ? skyLede(sky, w?.hourly) : brief ?? (sky ? skyLede(sky, w?.hourly) : "Reading the sky and the sea…");
   const sub = night ? brief : null;
 
   return (
@@ -116,11 +162,13 @@ export function Home({ now, sky, brief, beach, beachStatus, weather, buoy, marin
         </div>
       </div>
 
+      {sky && <SunriseVote now={now} sunAlt={sky.sunAltNow} />}
+
       <BeachStatusLine e={beachStatus} now={now} />
       <BusLine now={now} />
 
-      <div className="band chart-scroll">
-        {sky ? <HorizonChart sun={sky.tracks.sun} moon={sky.tracks.moon} planets={sky.tracks.planets} summary={skyLede(sky)} /> : <div style={{ minHeight: 200 }} aria-busy="true" />}
+      <div className="band chart-card">
+        {sky ? <HorizonChart sun={sky.tracks.sun} moon={sky.tracks.moon} planets={sky.tracks.planets} summary={skyLede(sky, w?.hourly)} /> : <div style={{ minHeight: 200 }} aria-busy="true" />}
       </div>
 
       <div className="home-foot">

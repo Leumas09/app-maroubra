@@ -1,0 +1,2 @@
+seuils fixes 263/233 K         bas: r=0.19 MAE=0.34 | moyen+haut: r=0.44 MAE=0.23 (n=392)
+hauteur 2 et 6 km (6,5 K/km)   bas: r=0.11 MAE=0.35 | moyen+haut: r=0.33 MAE=0.27 (n=392)

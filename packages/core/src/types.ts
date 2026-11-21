@@ -3,6 +3,10 @@
 export interface WeatherHour {
   t: number; // secondes Unix
   temp: number;
+  /** Température brute du modèle, quand une correction locale est appliquée. */
+  tempRaw?: number;
+  /** Vent brut du modèle, quand une correction locale est appliquée. */
+  windRaw?: number;
   feels: number;
   pop: number | null; // probabilité de pluie %
   precip: number; // mm
@@ -42,6 +46,8 @@ export interface Weather {
   hourly: WeatherHour[];
   daily: WeatherDay[];
   rainPast24h: number;
+  /** Correction locale appliquée (températures et vent heure par heure), mesurée sur la fenêtre glissante. */
+  corrected?: { temp: boolean; wind: boolean; note: string };
 }
 
 /** Avertissements officiels du Bureau of Meteorology qui concernent Sydney (flux RSS public NSW). */
@@ -60,6 +66,10 @@ export interface Metar {
   visibility: string | null;
   qnh: number | null;
   raw: string;
+  /** Pluie à l'observation (précipitation présente ou récente dans le message). */
+  rain?: boolean;
+  /** Observations des 3 dernières heures, toutes archivées pour la vérification. */
+  recent?: { t: number; temp: number | null; windKt: number | null; windDir: number | null; rain: boolean; raw: string }[];
 }
 
 export interface MarineHour {
@@ -172,6 +182,8 @@ export interface Flights {
   runway: { mode: string; confidence: "high" | "low" } | null;
   curfew: boolean;
   seenToday: number;
+  /** Annonces « overhead in N min » vérifiées depuis le démarrage du hub. */
+  judged?: { announced: number; hits: number; since: string };
   /** Agrégateur qui a fourni les positions (adsb.fi, ou adsb.lol en secours). */
   source?: string;
 }
@@ -320,6 +332,80 @@ export interface SourceEntry<T = unknown> {
 export interface Snapshot {
   version: number;
   sources: Record<string, SourceEntry>;
+}
+
+// Vérification en production : chaque prévision archivée est confrontée à son juge (METAR, bouée,
+// traces ADS-B, votes de la famille), sur une fenêtre glissante.
+
+export type ScoreStatus = "met" | "missed" | "collecting";
+
+export interface LeadScore {
+  lead: string; // ex. « 0–6 h »
+  n: number;
+  raw: number;
+  corrected: number | null;
+}
+
+export interface LiveScore {
+  key: "temp" | "wind" | "waves" | "rain" | "overhead" | "sunrise";
+  title: string;
+  judge: string;
+  target: string;
+  status: ScoreStatus;
+  /** Résultat principal, en clair. */
+  result: string;
+  /** Explication courte, en clair. */
+  detail: string;
+  n: number;
+  since: string | null;
+  unit?: string;
+  leads?: LeadScore[];
+}
+
+/** Correction apprise en ligne : biais par tranche d'échéance et heure locale de validité. */
+export interface CorrectionState {
+  on: boolean;
+  why: string;
+  /** Biais (prévision moins observation) : [tranche d'échéance][heure locale 0 à 23]. */
+  bias: number[][];
+  rawMae: number | null;
+  correctedMae: number | null;
+  n: number;
+}
+
+export interface Verification {
+  at: string;
+  windowDays: number;
+  scores: LiveScore[];
+  correction: { temp: CorrectionState; wind: CorrectionState };
+}
+
+export interface OverheadOutcome {
+  hex: string;
+  callsign: string | null;
+  /** Instant de l'annonce (ISO). */
+  at: string;
+  inMin: number;
+  /** Distance minimale réellement atteinte, km (null si l'avion a disparu avant). */
+  minKm: number | null;
+  hit: boolean;
+}
+
+/** Nuages vus par le satellite au-dessus d'un point, en pourcentage du disque examiné. */
+export interface SatelliteCloud { low: number; mid: number; high: number; total: number }
+
+export interface Satellite {
+  /** Heure du créneau d'observation (ISO). */
+  at: string;
+  band: string;
+  /** Largeur de l'image, km (centrée sur Maroubra, nord en haut). */
+  spanKm: number;
+  /** Température du ciel clair retenue, K. */
+  clearK: number;
+  overhead: SatelliteCloud | null;
+  within50km: SatelliteCloud | null;
+  /** Nuages le long de l'azimut du lever de soleil, à 0, 30, 80 et 150 km. */
+  alongSunrise: { km: number; cloud: SatelliteCloud | null }[];
 }
 
 /**

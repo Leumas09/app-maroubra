@@ -621,3 +621,57 @@ Demande de Samuel : les jours de semaine, les 396 entre 7 h 15 et 7 h 45 et entr
   - Jours fériés : 07:28, 08:15, 08:24, 08:32, 08:42.
 - **Clé d'API** : la clé TfNSW de Samuel est enregistrée dans l'environnement de développement seulement. Elle n'est ni dans le dépôt ni dans la Container App.
 - **Limite** : l'horaire est figé à la date d'extraction. TfNSW publie souvent des mises à jour : relancer le script en cas de changement d'horaire. Un rafraîchissement automatique, et les retards en temps réel (GTFS-realtime), demanderaient la clé comme secret de la Container App. Ce serait un nouveau secret, donc à accepter par Samuel, avec un changement Bicep.
+
+## Partie R : nuit du 21 au 22 novembre 2026
+
+Reprise de toute l'app avec `/be-ambitious`, sans validation intermédiaire (Samuel dort). Rien n'est déployé : tout est sur la branche `claude/zealous-mccarthy-c02vop`, et le déploiement attend l'OK de Samuel, comme le veut le socle. **Aucune ressource Azure nouvelle** : les ajouts utilisent la table `archive` existante et le réseau sortant de l'app.
+
+### R.1 Le but derrière le but, et ce que ça a changé
+
+Le barreau 3 du plan (« remplacer le rituel, et le prouver ») n'était pas en place : l'archive tournait depuis le 1er novembre, mais aucune prévision de production n'était jugée, et la page Track record ne montrait que le banc d'avant lancement. La nuit a donc visé **la preuve en continu**, puis l'**auto-correction** que cette preuve autorise, puis des **juges** pour les prévisions qui n'en avaient pas.
+
+| Type | Pourquoi |
+|---|---|
+| Altitude | L'écran doit prouver lui-même qu'il a raison, chaque jour, sans banc manuel. |
+| Depth | Partir des données brutes (METAR, bouée, traces ADS-B, images Himawari) et juger contre une observation, jamais contre soi. |
+| Range | Le métier du satellitaire (navigation géostationnaire, température de brillance) et celui du prévisionniste (MOS, score de Brier) entrent dans le hub. |
+
+### R.2 Ce qui est construit
+
+| Partie | Contenu | Juge |
+|---|---|---|
+| Track record vivant (`apps/hub/src/derive/verify.ts`) | Relu dans l'archive toutes les 3 h, 30 jours glissants : température et vent (MAE par échéance, IC 95 % par bootstrap par jours), pluie (score de Brier contre la climatologie de la fenêtre), vagues, annonces de survol, lever de soleil vu par la famille | METAR YSSY, bouée MHL, traces ADS-B, votes |
+| Correction apprise en ligne (`derive/correct.ts`) | Biais à moyenne décroissante (méthode NOAA, 10 jours) par tranche d'échéance et heure locale, lissé ; **rejouée sans fuite du futur** (une prévision émise à I n'est corrigée qu'avec les observations antérieures à I) ; appliquée à l'écran **seulement si elle bat le modèle brut sur 14 jours** ; valeurs brutes gardées (`tempRaw`, `windRaw`) et seules archivées | Le Track record vivant lui-même |
+| Archive enrichie | Tous les METAR des 3 dernières heures (avec la pluie), prévision Open-Meteo **au point de l'aéroport** et prévision de vagues **au point de la bouée** (juges sans décalage de lieu), score de lever de soleil émis la veille, issues des annonces de survol, votes, ciel vu par satellite au lever | Lecture compacte : 156 000 lignes relues en 0,6 s, vérifiées en 0,3 s, 25 Mo (mesuré en local) |
+| Juge des survols (`OverheadJudge`) | Chaque « overhead in N min » est suivi sur la trace réelle jusqu'à 3 min après l'heure prévue ; distance minimale calculée sur le segment entre deux relevés | Trace ADS-B |
+| Nuages vus de l'espace (`sources/himawari.ts`) | Lecteur HSD en TypeScript (bande 13, 2 km) ; requête partielle (1,2 Mo) et décodage des deux premiers flux bzip2 seulement (0,3 s) ; navigation géostationnaire CGMS ; ciel clair local (la terre froide la nuit ne passe plus pour du nuage) ; image dans Weather ; au lever du Soleil, nuages le long de son azimut archivés (pas encore jugés, voir R.3) | Pixel de Maroubra : ligne 4459, comme Satpy dans le banc. Côte : le contraste terre et mer de 13 h est maximal à moins d'un pixel (1,5 km) |
+| Vote du matin | « This morning's sunrise: worth getting up for? » sur l'accueil, du lever à 11 h, une fois par appareil ; `POST /api/vote`, appareil anonymisé (empreinte SHA-256) | Les votes jugent le score de lever de soleil (rang de Spearman, objectif 0,6 sur 8 matins au moins) |
+| Moments du ciel et nuages | ISS et lever de Lune sur la mer tus si le ciel sera couvert (85 %), signalés dès 50 % ; nuit noire, planètes et titre du soir annotés | Tests unitaires |
+| Cartes | Côte GSHHG pleine résolution, découpée (Sutherland-Hodgman) et simplifiée (Douglas-Peucker) : le port de Sydney et Botany Bay apparaissent, les îlots parasites disparaissent | Comparaison visuelle, alignement satellite |
+| Houle près du bord (`nearshoreFactor`, bouée côtière) | Le score de baignade supposait la houle à la plage égale à 0,8 fois celle du large. Mesuré sur 17 722 paires (bouée côtière IMOS de Collaroy-Narrabeen, 14 m de fond, plage orientée est, contre la bouée du large de Sydney, avril 2024 à novembre 2026) : 0,83 de NNE à ENE, 0,78 d'est, **0,62 de sud-est, 0,46 de sud**. L'ancienne constante surestimait donc les vagues de 30 à 70 % par les houles les plus fréquentes. Facteur interpolé selon la direction ; bouée côtière affichée dans Sea | Bouée côtière (mesure directe) ; limite : Collaroy est abritée du sud par Long Reef, Maroubra l'est moins, donc le facteur de sud est peut-être un peu bas pour Maroubra |
+| Téléphone | Graphiques larges ouverts sur ce qui compte (Soleil ou Lune, maison, instant présent) ; Track record compact | Captures Playwright, 0 débordement |
+| Fiabilité | Notifications déjà envoyées gardées dans Table Storage (pas de doublon au redéploiement) ; une prévision non rafraîchie depuis 90 min n'est plus réarchivée comme neuve ; une vue qui ne charge pas affiche « Retry » au lieu d'un écran blanc ; la pastille de reconnexion ne fait plus sauter l'écran | Relecture indépendante du code de la nuit (3 bogues et 4 risques trouvés, tous corrigés et testés) ; Lighthouse : décalage 0,107 → 0,015, performance mobile 95 → 98 |
+
+### R.3 Constats du hub réel lancé ici
+
+Le hub construit comme en production a tourné dans cette session sur les sources joignables (avions, METAR, bouées, satellite ; Open-Meteo par intermittence) :
+
+- **Bouées AODN « temps réel » : 12 à 26 h de retard.** À 13:00 UTC, la dernière mesure de la bouée de Sydney datait de 23:00 UTC la veille ; le fichier mensuel est republié une fois par jour vers 01:00 UTC. La règle « la bouée fait foi pour les 3 premières heures » ne s'applique donc presque jamais : c'est la prévision qui décide, la bouée sert de juge après coup. Une source vraiment temps réel (site de MHL) reste à tester depuis Azure.
+- **Score de baignade à 10/10 sans aucune donnée de vagues** (Open-Meteo Marine bloqué) : plafonné à 7 avec la raison affichée.
+- **Brief par règles qui répétait « Best swim »** quand le premier moment était le même créneau : corrigé.
+
+### R.4 Ce qui a été essayé et écarté (objectifs manqués, gardés visibles)
+
+| Essai | Résultat | Décision |
+|---|---|---|
+| Pluie dans 30 et 60 min par l'image satellite seule (nuages froids déplacés par corrélation croisée) | 1 063 images du 14 au 21/11 contre 395 METAR : CSI 0,35 au mieux, contre **0,47 pour la persistance** à 30 min (0,44 à 60 min) ; l'advection fait pire que l'image immobile. Les averses de la semaine venaient de nuages bas, aux sommets trop chauds pour l'infrarouge | Pas à l'écran ; inscrit comme manqué dans le Track record ; banc dans `apps/hub/scripts/backtest-nowcast.mts`, résultats dans `bench/results/nowcast_satellite_20261114_21.txt` |
+| Juger le score de lever de soleil par l'infrarouge (étages de nuages le long de l'azimut) | Le juge a d'abord été jugé : sur 392 METAR du 14 au 21/11, la part de nuages bas vue par la bande 13 ne suit pas le céilomètre (corrélation 0,19) ; moyens et hauts, 0,44. Les cirrus fins passent pour du bas (BKN280 classé bas les 17 et 18/11) | Score retiré du Track record vivant ; observations archivées pour un futur classement multi-bandes (B13 moins B15 pour les cirrus fins) ; l'écran ne nomme plus que les sommets très froids. Banc : `apps/hub/scripts/check-ir-layers.mts`, résultats dans `bench/results/ir_layers_vs_metar_20261114_21.txt` |
+| Secteur d'horizon marin mesuré sur la côte GSHHG | GSHHG lisse la baie de Maroubra (environ 800 m) : sa ligne d'eau passe 785 m à l'est de la plage | Hypothèse 40° à 160° gardée, et affichée comme hypothèse |
+| Beachwatch (qualité de l'eau officielle) et radar RainViewer | Hôtes refusés par le réseau de cette session ; format impossible à vérifier | Pas codé à l'aveugle ; à faire depuis une session qui les joint |
+
+### R.5 Avant de déployer
+
+1. Relire la branche, puis fusionner dans `main` après OK : le workflow teste, construit et déploie. Pas de what-if nécessaire (aucun changement Bicep).
+2. Dans `/health`, trois sources nouvelles doivent passer à `ok: true` : `fc-airport`, `fc-buoy`, `satellite`, puis `verify`.
+3. Le Track record vivant montrera dès le premier passage les 3 semaines d'archive déjà accumulées (si l'archive a bien tourné depuis le 1er novembre). Il juge la prévision **affichée** (point de Maroubra) contre l'aéroport, à 7 km ; la même prévision au point exact de l'aéroport est donnée en référence après 7 jours, pour séparer l'erreur du modèle de celle due au lieu.
+4. La correction ne s'appliquera d'elle-même que lorsqu'elle aura battu le modèle brut sur 14 jours avec au moins 300 heures jugées.

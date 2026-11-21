@@ -1,18 +1,14 @@
+import { useRef } from "react";
 import type { TrackPoint } from "../lib/sky-model";
 import { SITE } from "../lib/sky-model";
 import { time } from "../lib/format";
+import { useWidth } from "../lib/use-width";
 
-const W = 1000;
-const H = 280;
 const ALT_MIN = -12;
 const ALT_MAX = 90;
-// Nord au centre, est à droite : le Soleil de Maroubra passe au nord, la mer est à l'est.
-const x = (az: number) => ((((az - 180) % 360) + 360) % 360 / 360) * W;
-const y = (alt: number) => H - 24 - ((alt - ALT_MIN) / (ALT_MAX - ALT_MIN)) * (H - 40);
-const Y0 = y(0);
 
 /** Segments d'une trajectoire au-dessus de l'horizon, coupés au passage du nord (0°/360°). */
-function paths(points: TrackPoint[]): string[] {
+function paths(points: TrackPoint[], W: number, x: (az: number) => number, y: (alt: number) => number): string[] {
   const out: string[] = [];
   let cur: string[] = [];
   let prev: TrackPoint | null = null;
@@ -38,10 +34,19 @@ interface Props {
 }
 
 export function HorizonChart({ sun, moon, planets, summary }: Props) {
+  // Dessiné à la largeur de l'écran (1 unité = 1 pixel sur téléphone), plafonné à 1000 unités au-delà.
+  const box = useRef<HTMLDivElement>(null);
+  const W = Math.round(Math.min(1000, Math.max(300, useWidth(box, 1000))));
+  const H = W < 600 ? Math.round(W * 0.62) : 280;
+  // Nord au centre, est à droite : le Soleil de Maroubra passe au nord, la mer est à l'est.
+  const x = (az: number) => ((((az - 180) % 360) + 360) % 360 / 360) * W;
+  const y = (alt: number) => H - 24 - ((alt - ALT_MIN) / (ALT_MAX - ALT_MIN)) * (H - 40);
+  const Y0 = y(0);
   const [a, b] = SITE.seaAzimuth;
   const now = (pts: TrackPoint[]) => pts[0];
   const labels = ["S", "SW", "W", "NW", "N", "NE", "E", "SE", "S"];
   return (
+    <div ref={box}>
     <svg className="chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={summary}>
       <defs>
         <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
@@ -64,9 +69,9 @@ export function HorizonChart({ sun, moon, planets, summary }: Props) {
       {labels.map((l, i) => (
         <text key={i} x={Math.min(W - 10, Math.max(10, (i / 8) * W))} y={H - 4} textAnchor="middle" fontSize="13" fontWeight="700" fill="var(--muted)">{l}</text>
       ))}
-      {paths(sun).map((d, i) => <path key={`s${i}`} d={d} fill="none" stroke="var(--sun)" strokeWidth="3" strokeLinecap="round" />)}
-      {paths(moon).map((d, i) => <path key={`m${i}`} d={d} fill="none" stroke="var(--ink)" strokeOpacity="0.55" strokeWidth="2.5" strokeDasharray="1 6" strokeLinecap="round" />)}
-      {Object.entries(planets).map(([name, pts]) => paths(pts).map((d, i) => (
+      {paths(sun, W, x, y).map((d, i) => <path key={`s${i}`} d={d} fill="none" stroke="var(--sun)" strokeWidth="3" strokeLinecap="round" />)}
+      {paths(moon, W, x, y).map((d, i) => <path key={`m${i}`} d={d} fill="none" stroke="var(--ink)" strokeOpacity="0.55" strokeWidth="2.5" strokeDasharray="1 6" strokeLinecap="round" />)}
+      {Object.entries(planets).map(([name, pts]) => paths(pts, W, x, y).map((d, i) => (
         <path key={`${name}${i}`} d={d} fill="none" stroke="var(--accent)" strokeOpacity="0.5" strokeWidth="1.5" />
       )))}
       {[
@@ -78,11 +83,12 @@ export function HorizonChart({ sun, moon, planets, summary }: Props) {
         .map((o) => (
           <g key={o.label}>
             <circle cx={x(o.p.az)} cy={y(o.p.alt)} r={o.r} fill={o.fill} stroke="var(--card)" strokeWidth="2" />
-            <text x={x(o.p.az) > W - 90 ? x(o.p.az) - o.r - 4 : x(o.p.az) + o.r + 4} textAnchor={x(o.p.az) > W - 90 ? "end" : "start"}
+            <text x={x(o.p.az) > W - 70 ? x(o.p.az) - o.r - 4 : x(o.p.az) + o.r + 4} textAnchor={x(o.p.az) > W - 70 ? "end" : "start"}
               y={y(o.p.alt) + 4} fontSize="13" fontWeight="700" fill="var(--ink)">{o.label}</text>
           </g>
         ))}
-      <text x="8" y="18" fontSize="12" fill="var(--muted)">Facing north. Now {time(sun[0]?.t)}, paths for the next 24 h</text>
+      <text x="8" y="18" fontSize="12" fill="var(--muted)">{W < 600 ? `Facing north, next 24 h from ${time(sun[0]?.t)}` : `Facing north. Now ${time(sun[0]?.t)}, paths for the next 24 h`}</text>
     </svg>
+    </div>
   );
 }

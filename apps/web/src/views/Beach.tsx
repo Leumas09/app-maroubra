@@ -187,12 +187,12 @@ function verdict(b: B, daylight: boolean, closed: boolean): string {
   return { Great: "Great for a swim right now.", Good: "Good for a swim right now.", Fair: "Fair: swimmable, with care.", Poor: "Poor conditions for a swim.", "Stay out": "Stay out of the water." }[b.label];
 }
 
-interface Props { e: E<B>; status: E<BeachStatus>; tide: TideTable | null; now: Date; buoy: E<Buoy>; marine: E<Marine>; demo: boolean }
+interface Props { e: E<B>; status: E<BeachStatus>; tide: TideTable | null; now: Date; buoy: E<Buoy>; near?: E<Buoy>; marine: E<Marine>; demo: boolean }
 
-export function Beach({ e, status, tide, now, buoy, marine, demo }: Props) {
+export function Beach({ e, status, tide, now, buoy, near, marine, demo }: Props) {
   const b = e?.data;
   const official = <OfficialStatus e={status} now={now} />;
-  const sea = <SeaSection table={tide} now={now} buoy={buoy} marine={marine} />;
+  const sea = <SeaSection table={tide} now={now} buoy={buoy} near={near} marine={marine} />;
   if (!b) return <section className="beach">{official}<div className="card"><CardHead title="Beach"><Fresh e={e} /></CardHead><Empty>Waiting for weather and sea data.</Empty></div>{sea}</section>;
   const hour = sydneyHour(now);
   const daylight = hour >= 7 && hour < 19;
@@ -229,7 +229,7 @@ export function Beach({ e, status, tide, now, buoy, marine, demo }: Props) {
         )}
         <p className="note">Swim score <Fresh e={e} label="computed" /></p>
       </div>
-      <div className="card chart-scroll" style={{ padding: "14px 14px 8px" }}>
+      <div className="card chart-card" style={{ padding: "14px 14px 8px" }}>
         <DayRibbon b={b} now={now} tide={tide} />
         <div className="legend" aria-hidden="true">
           <span><i style={{ background: "var(--good)" }} />offshore wind</span>

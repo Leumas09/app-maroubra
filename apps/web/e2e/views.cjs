@@ -24,12 +24,24 @@ const views = (process.env.VIEWS || "home,weather,beach,sky,overhead,fire,news,t
     await page.click("button[type=submit]");
     await page.waitForURL(`${run.base}/`);
     for (const v of views) {
-      if (size !== "tablet" && !["home", "beach", "sky", "overhead", "weather"].includes(v)) continue;
+      // Toutes les vues à tous les formats : le contrôle des ascenseurs internes doit tout couvrir.
       await page.goto(`${run.base}/?at=${run.at}#${v}`, { waitUntil: "networkidle" });
       await page.waitForTimeout(400);
       await page.screenshot({ path: `${out}/${size}-${run.name}-${v}.png`, fullPage: size === "tablet" });
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1);
-      if (overflow) { failures++; console.log("HORIZONTAL OVERFLOW", size, run.name, v); }
+      // Le corps coupe ce qui dépasse (overflow-x: clip) : on cherche donc aussi les blocs qui sortent de l'écran.
+      const cut = await page.evaluate(() => [...document.querySelectorAll("body *")].filter((el) => !el.closest(".leaflet-container") && !(el instanceof SVGElement && el.ownerSVGElement)
+        && el.getBoundingClientRect().right > innerWidth + 1 && getComputedStyle(el).position !== "fixed").map((el) => `${el.tagName.toLowerCase()}.${[...el.classList].join(".")}`));
+      if (overflow || cut.length) { failures++; console.log("HORIZONTAL OVERFLOW", size, run.name, v, cut.slice(0, 4)); }
+      // Pas d'ascenseur à l'intérieur d'un bloc : seule la page défile (les cartes Leaflet gèrent leur propre déplacement).
+      const inner = await page.evaluate(() => [...document.querySelectorAll("body *")].filter((el) => {
+        if (el.closest(".leaflet-container")) return false;
+        const cs = getComputedStyle(el);
+        const x = /(auto|scroll)/.test(cs.overflowX) && el.scrollWidth > el.clientWidth + 1;
+        const y = /(auto|scroll)/.test(cs.overflowY) && el.scrollHeight > el.clientHeight + 1;
+        return x || y;
+      }).map((el) => `${el.tagName.toLowerCase()}.${[...el.classList].join(".")}`));
+      if (inner.length) { failures++; console.log("INNER SCROLL", size, run.name, v, inner.slice(0, 4)); }
     }
     if (errors.length) { failures++; console.log("ERRORS", size, run.name, errors.slice(0, 3).map((e) => e.slice(0, 160))); }
     await ctx.close();

@@ -8,6 +8,9 @@ import { facts, ruleBrief } from "../src/derive/brief";
 import { moments } from "../src/derive/moments";
 import { scoreSunrise } from "../src/derive/sunrise";
 import { loadTide } from "../src/derive/tide";
+import { sydneyHour, verify, type FcRow, type ObsRow } from "../src/derive/verify";
+import { applyCorrection } from "../src/derive/correct";
+import { clearRef, cloudAt, decodeHead, decodeHsd, localGrid, localRef, render } from "../src/sources/himawari";
 import { normalize, runwayMode, type RawAc } from "../src/sources/flights";
 import { parseFires } from "../src/sources/hazards";
 import { parseWarnings } from "../src/sources/weather";
@@ -34,6 +37,8 @@ const metar: Metar = { station: "YSSY", t: nowS - 20 * 60, temp: 24, dewpoint: 1
 const marine: Marine = { hourly: hours.filter((t) => t >= nowS - 3600).map((t, i) => ({ t, waveHeight: 1.3 + 0.01 * i, waveDir: 140, wavePeriod: 9, swellHeight: 1.1 + 0.008 * i, swellDir: 150, swellPeriod: 11.5, windWaveHeight: 0.4, sst: 20.4 })) };
 const buoy: Buoy = { station: "Sydney Waverider (MHL)", lat: -33.75, lon: 151.4, latest: { t: nowS - 2 * 3600, hs: 1.45, hmax: 2.6, tp: 11.8, dir: 148 },
   series: Array.from({ length: 44 }, (_, i) => ({ t: nowS - (46 - i) * 3600, hs: 1.2 + 0.4 * Math.sin(i / 7), hmax: 2.3, tp: 11 + Math.sin(i / 9), dir: 150 })) };
+const nearBuoy: Buoy = { station: "Collaroy-Narrabeen nearshore buoy (IMOS)", lat: -33.73, lon: 151.31, latest: { t: nowS - 3600, hs: 0.86, hmax: 1.5, tp: 11.5, dir: 128 },
+  series: buoy.series.map((o) => ({ ...o, hs: o.hs! * 0.6, dir: 128 })) };
 const raw: RawAc[] = [
   { hex: "7c6b2d", flight: "QFA432", r: "VH-VZA", t: "B738", desc: "BOEING 737-800", ownOp: "QANTAS AIRWAYS", year: "2003", category: "A3", type: "adsb_icao", squawk: "3012", alt_baro: 2100, gs: 165, track: 338, baro_rate: -640, lat: -34.012, lon: 151.205, seen_pos: 1 },
   { hex: "7c4920", flight: "VOZ821", r: "VH-YIA", t: "B738", desc: "BOEING 737-800", category: "A3", type: "adsb_icao", squawk: "4433", alt_baro: 7800, gs: 290, track: 160, baro_rate: 1800, lat: -33.99, lon: 151.21, seen_pos: 1 },
@@ -86,6 +91,33 @@ const s = scoreSunrise([{ low: 10, mid: 45, high: 30 }, { low: 10, mid: 40, high
 const sunrise = { date: "2026-11-15", time: "2026-11-14T18:42:00Z", ...s };
 const ms = moments({ weather, beach: b, sunrise, iss, space, fires, flights }, at);
 const brief = { text: ruleBrief(facts(weather, b, "low tide at 18:40", ms, at)), at: at.toISOString(), by: "rules" };
+// Track record vivant : un mois d'archive SYNTHÉTIQUE passé dans le vrai calcul (biais diurne connu).
+const fc: FcRow[] = [], obs: ObsRow[] = [], fcB: FcRow[] = [], obsB: ObsRow[] = [];
+const T0 = nowS - (nowS % 3600) - 30 * 86400;
+for (let i = 0; i < 30 * 24; i++) {
+  const issued = T0 + i * 3600;
+  const truthAt = (t: number) => 20 + 4 * Math.sin(((sydneyHour(t) - 9) / 24) * 2 * Math.PI);
+  for (let lead = 0; lead < 49; lead++) {
+    const valid = issued + lead * 3600;
+    const h = sydneyHour(valid);
+    fc.push({ issued, valid, temp: truthAt(valid) + (h >= 12 && h <= 17 ? 1.6 : h <= 5 ? -0.8 : 0) + Math.sin(valid / 5000 + lead) * (0.6 + lead / 60), wind: 18 + 6 * Math.sin(valid / 20000) + Math.cos(valid / 7000 + lead) * 3, pop: (valid / 3600) % 31 < 3 ? 70 : 10 });
+    fcB.push({ issued, valid, hs: 1.4 + 0.5 * Math.sin(valid / 90000) + Math.sin(valid / 13000 + lead) * 0.2 });
+  }
+  obs.push({ t: issued, temp: Math.round(truthAt(issued)), windKmh: 15 + 6 * Math.sin(issued / 20000), rain: (issued / 3600) % 31 < 2 });
+  obsB.push({ t: issued, hs: 1.4 + 0.5 * Math.sin(issued / 90000) });
+}
+const overhead = Array.from({ length: 41 }, (_, i) => ({ hex: `d${i}`, callsign: null, at: new Date((T0 + i * 60000) * 1000).toISOString(), inMin: 2 + (i % 4), minKm: i % 9 === 0 ? 2.4 : 0.3 + (i % 5) * 0.2, hit: i % 9 !== 0 }));
+const days = Array.from({ length: 6 }, (_, i) => new Date((T0 + (24 + i) * 86400) * 1000).toISOString().slice(0, 10));
+const verification = verify({ fcAirport: [], fcMaroubra: fc, fcBuoy: fcB, fcMarine: [], metar: obs, buoy: obsB, overhead, sunrise: days.map((d, i) => ({ date: d, score: [7.5, 3, 5.5, 8, 2, 6][i] })), votes: days.map((d, i) => ({ date: d, value: [2, 0, 1, 2, 0, 1][i] })) }, nowS);
+const weatherShown = applyCorrection(weather, verification, at.getTime());
+
+// Image satellite : le vrai fichier Himawari du 21/11/2026 12:00 UTC (fixture des tests), horodaté à l'heure de la démo.
+const seg = decodeHsd(decodeHead(readFileSync(new URL("../test/fixtures/himawari-b13-s0910-20261121-1200-head.bz2", import.meta.url))));
+const grid = localGrid([seg]);
+const scene = clearRef(grid), ref = localRef(grid, scene);
+writeFileSync(`${out}.png`, render(grid, ref));
+const satellite = { at: new Date(at.getTime() - 20 * 60e3).toISOString(), band: "B13 infrared 10.4 µm", spanKm: 300, clearK: scene, overhead: cloudAt(grid, ref, 0, 0, 10), within50km: cloudAt(grid, ref, 0, 0, 50), alongSunrise: [] };
+
 const warnings = parseWarnings(readFileSync(new URL("../test/fixtures/bom-warnings-nsw-2026-11-21.xml", import.meta.url), "utf8"));
-writeFileSync(out, JSON.stringify({ weather, warnings, metar, marine, buoy, beachStatus, flights, fires, air, space, iss, sunrise, news, beach: b, moments: ms, brief }));
+writeFileSync(out, JSON.stringify({ "buoy-near": nearBuoy, satellite, verify: verification, weather: weatherShown, warnings, metar, marine, buoy, beachStatus, flights, fires, air, space, iss, sunrise, news, beach: b, moments: ms, brief }));
 console.log(out, "beach", b.score, b.label, "moments", ms.length, "fires", fires.nearby.length, "brief:", brief.text);

@@ -1,8 +1,9 @@
 // Météo de Maroubra, sur le modèle des fonctions de Google Météo : l'instant, les avertissements officiels,
 // l'heure par heure, dix jours que l'on peut choisir, puis des tuiles (pluie, vent, air, UV, soleil, visibilité,
 // pression, humidité). Pour « maintenant », les valeurs mesurées à l'aéroport de Sydney (METAR) passent avant le modèle.
-import type { AirQuality, Metar, SourceEntry, Weather as W, WeatherDay, WeatherHour, WeatherWarnings } from "@maroubra/core";
+import type { AirQuality, Metar, Satellite, SourceEntry, Weather as W, WeatherDay, WeatherHour, WeatherWarnings } from "@maroubra/core";
 import { useState, type ReactNode } from "react";
+import { cloudText, SatelliteMap } from "../components/SatelliteMap";
 import { CardHead, Empty, Fresh, WxIcon, wxText } from "../components/bits";
 import { compass, time } from "../lib/format";
 
@@ -93,7 +94,7 @@ function PressureGauge({ hpa }: { hpa: number }) {
 function HourStrip({ hours, night, nowS }: { hours: WeatherHour[]; night: boolean; nowS: number }) {
   if (!hours.length) return <Empty>No hourly forecast for this day.</Empty>;
   return (
-    <ol className="wx-hours" aria-label="Hourly forecast" tabIndex={0}>
+    <ol className="wx-hours" aria-label="Hourly forecast">
       {hours.map((h, i) => (
         <li key={h.t}>
           <span className="wx-h-temp">{Math.round(h.temp)}°</span>
@@ -106,7 +107,7 @@ function HourStrip({ hours, night, nowS }: { hours: WeatherHour[]; night: boolea
   );
 }
 
-export function Weather({ e, metar, air, warnings, night, now }: { e: E<W>; metar: E<Metar>; air: E<AirQuality>; warnings: E<WeatherWarnings>; night: boolean; now: Date }) {
+export function Weather({ e, metar, air, warnings, sat, night, now }: { e: E<W>; metar: E<Metar>; air: E<AirQuality>; warnings: E<WeatherWarnings>; sat?: E<Satellite>; night: boolean; now: Date }) {
   const w = e?.data;
   const [pick, setPick] = useState(0);
   if (!w) return <section className="card"><CardHead title="Weather"><Fresh e={e} /></CardHead><Empty>Waiting for the forecast.</Empty></section>;
@@ -163,6 +164,7 @@ export function Weather({ e, metar, air, warnings, night, now }: { e: E<W>; meta
       <div className="card wx-panel">
         <h2>{isToday ? "Hourly forecast" : `Hourly, ${sel ? longDay.format(sel.t * 1000 + 12 * 3600e3) : ""}`}</h2>
         <HourStrip hours={hours} night={night} nowS={nowS} />
+        {w.corrected && <p className="note">{w.corrected.note} <a href="#track">How we check this</a>.</p>}
       </div>
 
       <div className="card wx-panel">
@@ -226,6 +228,15 @@ export function Weather({ e, metar, air, warnings, night, now }: { e: E<W>; meta
               {dew != null && <p className="wx-label"><span className="wx-dew">{Math.round(dew)}°</span> Dew point</p>}
             </Tile>
           )}
+        </div>
+      )}
+
+      {sat?.data && (
+        <div className="card wx-panel">
+          <CardHead title={`Clouds from space, ${time(new Date(sat.data.at))}`}><Fresh e={sat} label="Image" /></CardHead>
+          <SatelliteMap s={sat.data} />
+          <p style={{ margin: "10px 0 0", lineHeight: 1.45 }}>{cloudText(sat.data)}</p>
+          <p className="note">Himawari-9 infrared, day and night: the higher and colder the cloud top, the whiter. Thin high cloud and low fog can be missed.</p>
         </div>
       )}
 

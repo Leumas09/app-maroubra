@@ -31,7 +31,9 @@ export function ruleBrief(f: BriefFacts): string {
   const parts: string[] = [];
   if (f.weather) parts.push(`${f.weather.now[0].toUpperCase()}${f.weather.now.slice(1)}, ${f.weather.tempC}°C, up to ${f.weather.maxToday}°C`);
   if (f.beach) parts.push(f.beach.best && f.beach.score >= 5 ? `Best swim ${f.beach.best}` : `Beach ${f.beach.label.toLowerCase()}, ${f.beach.sea.toLowerCase()} sea`);
-  if (f.moments[0]) parts.push(f.moments[0].title);
+  // Premier moment qui n'est pas déjà dit (le meilleur créneau de baignade l'est souvent).
+  const m = f.moments.find((x) => !parts.some((p) => p.includes(x.title.replace(/^Best swim /, ""))));
+  if (m) parts.push(m.title);
   return parts.map((x) => `${x}.`).join(" ");
 }
 

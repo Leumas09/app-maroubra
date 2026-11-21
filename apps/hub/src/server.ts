@@ -3,6 +3,7 @@ import { Hono, type Context } from "hono";
 import { compress } from "hono/compress";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { streamSSE } from "hono/streaming";
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Auth, clientIp, COOKIE, LoginLimiter } from "./auth";
@@ -18,13 +19,15 @@ import type { Store } from "./store";
 export const SSE_MAX_MS = 200_000;
 const SSE_HEARTBEAT_MS = 15_000;
 
+export interface Vote { date: string; value: number; voter: string }
+
 /** Hôtes d'images externes : webcams de Randwick, fonds de carte (OpenStreetMap, Esri), photos d'avions (Planespotters, airport-data.com, Wikimedia). */
 const IMG_HOSTS = "https://www.randwick.nsw.gov.au https://tile.openstreetmap.org https://server.arcgisonline.com https://*.plnspttrs.net https://*.planespotters.net " +
   "https://image.airport-data.com https://airport-data.com https://upload.wikimedia.org https://thumb.wikimedia.org https://*.secdn.net";
 /** Flux vidéo des webcams de Randwick (HLS, servi par secdn.net). */
 const MEDIA_HOSTS = "https://*.secdn.net";
 
-export function createApp(cfg: Config, store: Store, deps: { push?: Push; photos?: PhotoFinder; area?: (lat: number, lon: number, nm: number) => Promise<Aircraft[]>; history?: FlightHistory } = {}) {
+export function createApp(cfg: Config, store: Store, deps: { push?: Push; vote?: (v: Vote) => Promise<void>; satellite?: () => Buffer | null; photos?: PhotoFinder; area?: (lat: number, lon: number, nm: number) => Promise<Aircraft[]>; history?: FlightHistory } = {}) {
   const app = new Hono();
   const auth = new Auth(cfg.password!, cfg.sessionSecret);
   const limiter = new LoginLimiter();
@@ -128,6 +131,30 @@ export function createApp(cfg: Config, store: Store, deps: { push?: Push; photos
         unsubscribe();
       }
     });
+  });
+
+  // Dernière image satellite des nuages (Himawari-9), calculée par le hub.
+  app.get("/api/satellite.png", (c) => {
+    const png = deps.satellite?.();
+    if (!png) return c.json({ error: "no image yet" }, 404);
+    c.header("Cache-Control", "private, max-age=300");
+    return c.body(new Uint8Array(png), 200, { "Content-Type": "image/png" });
+  });
+
+  // Vote du matin sur le lever de soleil : le juge du score de lever de soleil.
+  app.post("/api/vote", async (c) => {
+    const body = await c.req.json().catch(() => null);
+    const date = String(body?.date ?? "");
+    const value = Number(body?.value);
+    const voter = String(body?.voter ?? "");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || ![0, 1, 2].includes(value) || !voter || voter.length > 64) return c.json({ error: "bad vote" }, 400);
+    // Un vote par appareil et par matin, seulement pour hier ou aujourd'hui (jour de Sydney).
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Australia/Sydney" }).format(new Date());
+    const yesterday = new Intl.DateTimeFormat("en-CA", { timeZone: "Australia/Sydney" }).format(new Date(Date.now() - 86400e3));
+    if (date !== today && date !== yesterday) return c.json({ error: "too late" }, 400);
+    const id = createHash("sha256").update(voter).digest("hex").slice(0, 16);
+    await deps.vote?.({ date, value, voter: id });
+    return c.json({ ok: true });
   });
 
   // Avions d'une zone (centre et rayon en milles nautiques), quand la carte sort des environs de la maison.

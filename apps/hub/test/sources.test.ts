@@ -1,10 +1,12 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { beach, explainBest, label, scoreHour, windSide } from "../src/derive/beach";
+import { beach, explainBest, label, nearshoreFactor, scoreHour, windSide } from "../src/derive/beach";
 import { closureReason, parseBeachsafe, parseBeachwatch, parseLifeguards, reportFields } from "../src/sources/beach-status";
 import { due, moments } from "../src/derive/moments";
 import { ruleBrief } from "../src/derive/brief";
 import { scoreSunrise } from "../src/derive/sunrise";
+import { SITE } from "../src/config";
+import { destination } from "../src/geo";
 import { isCurfew, normalize, predictOverhead, runwayMode, type RawAc } from "../src/sources/flights";
 import { auroraFromKp, parseDescription, parseFires, parseSpace } from "../src/sources/hazards";
 import { dedupe, keywordLocal, parseRss } from "../src/sources/news";
@@ -42,7 +44,7 @@ describe("feux NSW RFS (flux réel du 10/10/2020)", () => {
 describe("avions (format v2 d'adsb.lol, données construites à la main)", () => {
   const raw: RawAc[] = [
     { hex: "7c6b2d", flight: "QFA432  ", r: "VH-VZA", t: "B738", alt_baro: 1800, gs: 160, track: 340, baro_rate: -700, lat: -34.02, lon: 151.20, seen_pos: 1 },
-    { hex: "7c0001", flight: "QFA1", t: "A388", alt_baro: 4000, gs: 250, track: 90, lat: -33.9496, lon: 151.20, seen_pos: 1 },
+    { hex: "7c0001", flight: "QFA1", t: "A388", alt_baro: 4000, gs: 250, track: 90, baro_rate: 1500, lat: -33.9496, lon: 151.20, seen_pos: 1 },
     { hex: "7cffff", alt_baro: "ground", lat: -33.94, lon: 151.18, seen_pos: 2 },
     { hex: "stale", lat: -33.9, lon: 151.2, seen_pos: 200 },
   ];
@@ -64,6 +66,17 @@ describe("avions (format v2 d'adsb.lol, données construites à la main)", () =>
   });
   it("pas de survol pour un avion qui s'éloigne", () => {
     expect(predictOverhead({ lat: -33.9496, lon: 151.30, track: 90, speedKt: 250 })).toBeNull();
+  });
+  it("pas d'annonce pour un avion en manoeuvre d'arrivée, sauf aligné sur la finale 25", () => {
+    // Cas réel du 21/11/2026 : vent arrière vers l'est-nord-est, bas et en descente, puis virage loin de Maroubra.
+    const [lat, lon] = destination(SITE.lat, SITE.lon, 250, 20);
+    const downwind = { lat, lon, track: 70, speedKt: 280 };
+    expect(predictOverhead(downwind)).not.toBeNull();
+    expect(predictOverhead({ ...downwind, altFt: 6700, vrate: -1088 })).toBeNull();
+    expect(predictOverhead({ ...downwind, altFt: 11000, vrate: -1400 })).not.toBeNull();
+    expect(predictOverhead({ ...downwind, altFt: 3000, vrate: 2000 })).not.toBeNull(); // départ en montée
+    const [la2, lo2] = destination(SITE.lat, SITE.lon, 70, 15);
+    expect(predictOverhead({ lat: la2, lon: lo2, track: 250, speedKt: 180, altFt: 3000, vrate: -700 })).not.toBeNull();
   });
   it("déduit le mode de pistes et le couvre-feu", () => {
     expect(runwayMode(acs)?.mode).toBe("Arrivals on runway 34L/34R");
@@ -229,6 +242,41 @@ describe("actualités", () => {
     expect(items[0].source).toBe("The Daily Telegraph");
     expect(dedupe(items).length).toBe(2);
     expect(keywordLocal(items[2].title)).toBe(false);
+  });
+});
+
+describe("moments du ciel et nuages", () => {
+  const now = new Date("2026-11-14T08:00:00Z");
+  const pass = { start: "2026-11-14T09:00:00Z", max: "2026-11-14T09:03:00Z", end: "2026-11-14T09:06:00Z", maxAlt: 60, startAz: 300, endAz: 120, durationMin: 6 };
+  const w = (cloud: number) => ({ current: {}, daily: [], rainPast24h: 0, hourly: [{ t: Date.parse("2026-11-14T09:00:00Z") / 1000, cloud, cloudLow: cloud, precip: 0, pop: 0 }] }) as never;
+  it("annonce le passage de l'ISS par ciel dégagé, le signale nuageux, le tait couvert", () => {
+    const iss = { passes: [pass], tleEpoch: "" };
+    expect(moments({ iss, weather: w(10) }, now).find((m) => m.kind === "iss")?.detail).not.toMatch(/Cloud/);
+    expect(moments({ iss, weather: w(60) }, now).find((m) => m.kind === "iss")?.detail).toMatch(/Cloud forecast 60%/);
+    expect(moments({ iss, weather: w(95) }, now).find((m) => m.kind === "iss")).toBeUndefined();
+  });
+});
+
+describe("houle près du bord, mesurée (Collaroy contre Sydney, 17 722 paires)", () => {
+  it("dépend de la direction : presque entière de l'est, moitié du sud", () => {
+    expect(nearshoreFactor(90)).toBeCloseTo(0.78, 2);
+    expect(nearshoreFactor(180)).toBeCloseTo(0.46, 2);
+    expect(nearshoreFactor(157.5)).toBeCloseTo(0.54, 2);
+    expect(nearshoreFactor(20)).toBeCloseTo(0.83, 2);
+    expect(nearshoreFactor(null)).toBeCloseTo(0.62, 2);
+  });
+});
+
+describe("défauts vus sur le hub réel", () => {
+  it("sans données de vagues, le score de baignade est plafonné à 7", () => {
+    const r = scoreHour({ t: 0, surf: null, period: null, wind: 5, windDir: 270, sst: 22, feels: 27, precip: 0, pop: 0, uv: 5 }, { afterRain: false, bluebottles: false, tide: [] });
+    expect(r.score).toBe(7);
+    expect(r.reasons.some((x) => /Wave data unavailable/.test(x.text))).toBe(true);
+  });
+  it("le brief par règles ne répète pas le meilleur créneau de baignade", () => {
+    const text = ruleBrief({ localTime: "Sunday 06:00", weather: null, beach: { score: 9, label: "Great", best: "07:00 to 09:00 (9/10)", sea: "Clean", waterC: 21 }, moments: [{ title: "Best swim 07:00 to 09:00", detail: "" }, { title: "Space Station overhead at 20:12", detail: "" }] });
+    expect(text.match(/Best swim/g)).toHaveLength(1);
+    expect(text).toMatch(/Space Station/);
   });
 });
 

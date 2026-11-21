@@ -9,7 +9,24 @@ import { angleDiff, compass } from "../geo";
 import { minutesFromLow, type TideExtremum } from "./tide";
 
 export const BEACH_NORMAL = 100;
-const NEARSHORE = 0.8; // atténuation approximative de la houle du large à la plage
+/**
+ * Houle près du bord rapportée à celle du large, selon la direction de la houle. Mesuré, et non supposé :
+ * 17 722 paires de mesures de la bouée côtière de Collaroy-Narrabeen (14 m de fond, plage orientée est,
+ * comme Maroubra) et de la bouée du large de Sydney, avril 2024 à novembre 2026 (scripts/nearshore-ratio.mts).
+ * Médianes : 0,83 de NNE à ENE, 0,78 d'est, 0,62 de sud-est, 0,46 de sud. L'ancienne constante 0,8
+ * surestimait les vagues par houle de sud-est et de sud, la plus fréquente à Sydney.
+ */
+const NEARSHORE: [number, number][] = [[45, 0.83], [90, 0.78], [135, 0.62], [180, 0.46], [225, 0.43]];
+export function nearshoreFactor(dir: number | null | undefined): number {
+  if (dir == null || !Number.isFinite(dir)) return 0.62; // médiane de toutes directions confondues : 0,60
+  const d = ((dir % 360) + 360) % 360;
+  if (d <= NEARSHORE[0][0] || d > 300) return NEARSHORE[0][1];
+  for (let i = 0; i + 1 < NEARSHORE.length; i++) {
+    const [a, fa] = NEARSHORE[i], [b, fb] = NEARSHORE[i + 1];
+    if (d <= b) return fa + ((fb - fa) * (d - a)) / (b - a);
+  }
+  return NEARSHORE.at(-1)![1];
+}
 
 export type WindSide = SwimHour["side"];
 export function windSide(fromDeg: number): WindSide {
@@ -37,6 +54,8 @@ export interface ScoreCtx {
 export function scoreHour(h: HourInput, ctx: ScoreCtx): { score: number; reasons: BeachReason[] } {
   const r: BeachReason[] = [];
   const add = (key: BeachFactorKey, text: string, effect: BeachReason["effect"], pts = 0) => r.push({ key, text, effect, pts });
+  // Sans mesure ni prévision de vagues, on ne promet pas une baignade parfaite.
+  if (h.surf == null) add("surf", "Wave data unavailable: score capped at 7", "minus", 3);
   if (h.surf != null) {
     const pen = h.surf < 0.6 ? 0 : h.surf < 1 ? 1 : h.surf < 1.5 ? 2.5 : h.surf < 2 ? 4 : 6;
     add("surf", `Surf about ${h.surf.toFixed(1)} m${h.surf < 0.6 ? ", gentle" : h.surf >= 2 ? ", big and powerful" : ""}`, pen ? "minus" : "plus", pen);
@@ -125,9 +144,11 @@ export function beach(weather: Weather, marine: Marine | null, buoy: Buoy | null
       const m = mByT.get(h.t);
       // La bouée fait foi pour les premières heures, la prévision ensuite.
       const early = h.t - nowS < 3 * 3600;
-      const offshoreHs = early && buoyNow?.hs != null ? buoyNow.hs : m?.swellHeight ?? m?.waveHeight ?? null;
+      const fromBuoy = early && buoyNow?.hs != null;
+      const offshoreHs = fromBuoy ? buoyNow!.hs : m?.swellHeight ?? m?.waveHeight ?? null;
+      const dir = fromBuoy ? buoyNow!.dir : m?.swellDir ?? m?.waveDir ?? null;
       return {
-        t: h.t, surf: offshoreHs == null ? null : Math.round(offshoreHs * NEARSHORE * 100) / 100, period: (early ? buoyNow?.tp : null) ?? m?.swellPeriod ?? null,
+        t: h.t, surf: offshoreHs == null ? null : Math.round(offshoreHs * nearshoreFactor(dir) * 100) / 100, period: (early ? buoyNow?.tp : null) ?? m?.swellPeriod ?? null,
         swellDir: (early ? buoyNow?.dir : null) ?? m?.swellDir ?? null,
         wind: h.wind, gust: h.gust, windDir: h.windDir, sst: m?.sst ?? marine?.hourly[0]?.sst ?? null, feels: h.feels, precip: h.precip, pop: h.pop, uv: h.uv,
       };
@@ -172,7 +193,7 @@ export function beach(weather: Weather, marine: Marine | null, buoy: Buoy | null
   return {
     score: current.score, label: label(current.score), reasons: current.reasons, best, hours,
     sea: {
-      label: seaLabel, surfM: hs == null ? null : Math.round(hs * NEARSHORE * 10) / 10, periodS: buoyNow?.tp ?? marine?.hourly[0]?.swellPeriod ?? null,
+      label: seaLabel, surfM: hs == null ? null : Math.round(hs * nearshoreFactor(buoyNow?.dir ?? marine?.hourly[0]?.swellDir) * 10) / 10, periodS: buoyNow?.tp ?? marine?.hourly[0]?.swellPeriod ?? null,
       dir: buoyNow?.dir ?? marine?.hourly[0]?.swellDir ?? null, wind: `${side}, ${Math.round(w.wind)} km/h`,
       windKmh: Math.round(w.wind), gustKmh: Math.round(w.gust), windDir: Math.round(w.windDir), side,
     },

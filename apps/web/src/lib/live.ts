@@ -36,7 +36,15 @@ export function useLive(): { snap: Snapshot | null; connected: boolean } {
     open();
     return () => { closed = true; es?.close(); };
   }, []);
-  return { snap, connected };
+  // Le flux se reconnecte toutes les 200 s (plafond de Container Apps) : on ne signale la coupure
+  // qu'au-delà de 5 s, pour que l'écran ambiant ne clignote pas.
+  const [lost, setLost] = useState(false);
+  useEffect(() => {
+    if (connected) { setLost(false); return; }
+    const id = setTimeout(() => setLost(true), 5000);
+    return () => clearTimeout(id);
+  }, [connected]);
+  return { snap, connected: !lost };
 }
 
 export function entry<T>(snap: Snapshot | null, id: string): (SourceEntry<T> & { stale: boolean; ageMin: number | null }) | null {

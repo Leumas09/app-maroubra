@@ -1,0 +1,8 @@
+Collaroy 26897 2024-04-16T00:02:19.000Z pos -33.7267 151.30665 depth 14
+Sydney 17287 2024-01-01T00:00:00.000Z pos -33.75 151.4
+paires 17722 rapport médian Collaroy/Sydney 0.60 IQR 0.48 0.73
+NNE-ENE  n   1384 médian 0.83 IQR 0.78 – 0.88
+E        n   2959 médian 0.78 IQR 0.72 – 0.84
+SE       n   6791 médian 0.62 IQR 0.53 – 0.69
+S        n   6493 médian 0.46 IQR 0.39 – 0.53
+SW-N     n     95 médian 0.43 IQR 0.35 – 0.49

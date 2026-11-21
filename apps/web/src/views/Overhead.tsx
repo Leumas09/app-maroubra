@@ -251,7 +251,7 @@ export function Overhead({ e, night, demo }: { e: E<Flights>; night: boolean; de
         </div>
       ))}
       <div className="ov-main">
-      <div className="card chart-scroll map-panel">
+      <div className="card chart-card map-panel">
         <div className="map-tools">
           <div className="seg" role="group" aria-label="Map background">
             {((demo ? ["map", "satellite", "plain"] : ["map", "satellite"]) as Base[]).map((b) => (
