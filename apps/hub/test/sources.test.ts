@@ -209,3 +209,16 @@ describe("houle près du bord, mesurée (Collaroy contre Sydney, 17 722 paires)"
     expect(nearshoreFactor(null)).toBeCloseTo(0.62, 2);
   });
 });
+
+describe("défauts vus sur le hub réel", () => {
+  it("sans données de vagues, le score de baignade est plafonné à 7", () => {
+    const r = scoreHour({ t: 0, surf: null, period: null, wind: 5, windDir: 270, sst: 22, feels: 27, precip: 0, pop: 0, uv: 5 }, { afterRain: false, bluebottles: false, tide: [] });
+    expect(r.score).toBe(7);
+    expect(r.reasons.some((x) => /Wave data unavailable/.test(x.text))).toBe(true);
+  });
+  it("le brief par règles ne répète pas le meilleur créneau de baignade", () => {
+    const text = ruleBrief({ localTime: "Sunday 06:00", weather: null, beach: { score: 9, label: "Great", best: "07:00 to 09:00 (9/10)", sea: "Clean", waterC: 21 }, moments: [{ title: "Best swim 07:00 to 09:00", detail: "" }, { title: "Space Station overhead at 20:12", detail: "" }] });
+    expect(text.match(/Best swim/g)).toHaveLength(1);
+    expect(text).toMatch(/Space Station/);
+  });
+});

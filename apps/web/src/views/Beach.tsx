@@ -76,7 +76,7 @@ export function Beach({ e, now }: { e: E<B>; now: Date }) {
             <dt>Swell period</dt><dd>{b.sea.periodS != null ? `${Math.round(b.sea.periodS)} s` : "n/a"}</dd>
             <dt>Swell from</dt><dd>{b.sea.dir != null ? compass(b.sea.dir) : "n/a"}</dd>
             <dt>Wind</dt><dd>{b.sea.wind}</dd>
-            <dt>Water temperature</dt><dd>{b.waterTemp != null ? `${b.waterTemp.toFixed(1)}°C` : "n/a"}</dd>
+            <dt>Water temperature (model)</dt><dd>{b.waterTemp != null ? `${b.waterTemp.toFixed(1)}°C` : "n/a"}</dd>
           </dl>
           <p className="note">
             Always swim between the red and yellow flags. Official patrol status and closures: search Maroubra on <a href="https://beachsafe.org.au/" target="_blank" rel="noreferrer">Beachsafe</a>.

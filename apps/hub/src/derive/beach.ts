@@ -42,7 +42,11 @@ interface HourInput { t: number; surf: number | null; period: number | null; win
 export function scoreHour(h: HourInput, ctx: { afterRain: boolean; bluebottles: boolean; tide: TideExtremum[] }): { score: number; reasons: Beach["reasons"] } {
   let s = 10;
   const r: Beach["reasons"] = [];
-  if (h.surf != null) {
+  if (h.surf == null) {
+    // Sans mesure ni prévision de vagues, on ne promet pas une baignade parfaite.
+    s = Math.min(s, 7);
+    r.push({ text: "Wave data unavailable: score capped at 7", effect: "info" });
+  } else {
     const pen = h.surf < 0.6 ? 0 : h.surf < 1 ? 1 : h.surf < 1.5 ? 2.5 : h.surf < 2 ? 4 : 6;
     s -= pen;
     r.push({ text: `Surf about ${h.surf.toFixed(1)} m${h.surf < 0.6 ? ", gentle" : h.surf >= 2 ? ", big and powerful" : ""}`, effect: pen ? "minus" : "plus" });

@@ -516,7 +516,15 @@ Le barreau 3 du plan (« remplacer le rituel, et le prouver ») n'était pas en 
 | Téléphone | Graphiques larges ouverts sur ce qui compte (Soleil ou Lune, maison, instant présent) ; Track record compact | Captures Playwright, 0 débordement |
 | Fiabilité | Notifications déjà envoyées gardées dans Table Storage (pas de doublon au redéploiement) ; une prévision non rafraîchie depuis 90 min n'est plus réarchivée comme neuve ; une vue qui ne charge pas affiche « Retry » au lieu d'un écran blanc ; la pastille de reconnexion ne fait plus sauter l'écran | Relecture indépendante du code de la nuit (3 bogues et 4 risques trouvés, tous corrigés et testés) ; Lighthouse : décalage 0,107 → 0,015, performance mobile 95 → 98 |
 
-### I.3 Ce qui a été essayé et écarté (objectifs manqués, gardés visibles)
+### I.3 Constats du hub réel lancé ici
+
+Le hub construit comme en production a tourné dans cette session sur les sources joignables (avions, METAR, bouées, satellite ; Open-Meteo par intermittence) :
+
+- **Bouées AODN « temps réel » : 12 à 26 h de retard.** À 13:00 UTC, la dernière mesure de la bouée de Sydney datait de 23:00 UTC la veille ; le fichier mensuel est republié une fois par jour vers 01:00 UTC. La règle « la bouée fait foi pour les 3 premières heures » ne s'applique donc presque jamais : c'est la prévision qui décide, la bouée sert de juge après coup. Une source vraiment temps réel (site de MHL) reste à tester depuis Azure.
+- **Score de baignade à 10/10 sans aucune donnée de vagues** (Open-Meteo Marine bloqué) : plafonné à 7 avec la raison affichée.
+- **Brief par règles qui répétait « Best swim »** quand le premier moment était le même créneau : corrigé.
+
+### I.4 Ce qui a été essayé et écarté (objectifs manqués, gardés visibles)
 
 | Essai | Résultat | Décision |
 |---|---|---|
@@ -525,7 +533,7 @@ Le barreau 3 du plan (« remplacer le rituel, et le prouver ») n'était pas en 
 | Secteur d'horizon marin mesuré sur la côte GSHHG | GSHHG lisse la baie de Maroubra (environ 800 m) : sa ligne d'eau passe 785 m à l'est de la plage | Hypothèse 40° à 160° gardée, et affichée comme hypothèse |
 | Beachwatch (qualité de l'eau officielle) et radar RainViewer | Hôtes refusés par le réseau de cette session ; format impossible à vérifier | Pas codé à l'aveugle ; à faire depuis une session qui les joint |
 
-### I.4 Avant de déployer
+### I.5 Avant de déployer
 
 1. Relire la branche, puis fusionner dans `main` après OK : le workflow teste, construit et déploie. Pas de what-if nécessaire (aucun changement Bicep).
 2. Dans `/health`, trois sources nouvelles doivent passer à `ok: true` : `fc-airport`, `fc-buoy`, `satellite`, puis `verify`.
