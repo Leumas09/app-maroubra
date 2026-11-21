@@ -55,6 +55,26 @@ export function horizontal(body: Astro.Body, at: Date, site: Site = MAROUBRA): H
   return { alt: h.altitude, az: h.azimuth };
 }
 
+/**
+ * Étoiles du catalogue (J2000, degrés) vues de Maroubra : une seule rotation EQJ vers horizon par instant
+ * (précession, nutation, rotation de la Terre), puis réfraction optionnelle. Vérifié contre Skyfield.
+ */
+export function starsHorizontal(list: { ra: number; dec: number }[], at: Date, refraction = true, site: Site = MAROUBRA): Horizontal[] {
+  const time = A.MakeTime(at);
+  const rot = A.Rotation_EQJ_HOR(time, observer(site));
+  return list.map(({ ra, dec }) => {
+    const v = A.RotateVector(rot, A.VectorFromSphere(new A.Spherical(dec, ra, 1), time));
+    const h = A.HorizonFromVector(v, refraction ? "normal" : null as unknown as "normal");
+    return { alt: h.lat, az: h.lon };
+  });
+}
+
+/** Position du corps dans le ciel (J2000) : RA et Dec en degrés, pour la carte du ciel. */
+export function bodyRaDec(body: Astro.Body, at: Date, site: Site = MAROUBRA): { ra: number; dec: number } {
+  const eq = A.Equator(body, at, observer(site), false, true);
+  return { ra: eq.ra * 15, dec: eq.dec };
+}
+
 export function moonIllumination(at: Date): number {
   return A.Illumination(A.Body.Moon, at).phase_fraction;
 }

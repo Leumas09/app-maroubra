@@ -596,3 +596,16 @@ Juge : pour « maintenant », visibilité, pression et point de rosée viennent 
   - « Play live video » tente le flux HLS (`randwickcc-hls.secdn.net/.../playlist.m3u8`, lecteur hls.js chargé à la demande) et revient à l'image s'il ne démarre pas en 12 s.
   - Le lecteur de la mairie est derrière une vérification Cloudflare : l'adresse du flux vidéo n'a pas pu être confirmée depuis la session de développement. À vérifier en production.
 - CSP : `img-src`, `media-src` et `connect-src` acceptent `https://*.secdn.net`.
+
+## Partie P : Sky plus riche, plan « be ambitious » (21 novembre 2026)
+
+Samuel trouvait la page Sky pauvre. Plan en trois paliers ; les deux premiers sont faits.
+
+1. **Carte du ciel en direct** au-dessus de Maroubra (zénith au centre, nord en haut, est à gauche). Elle montre :
+   - les 1 627 étoiles jusqu'à la magnitude 5 (Hipparcos, données d3-celestial, BSD-3) ;
+   - les constellations et la Voie lactée ;
+   - les planètes, la Lune et le Soleil.
+
+   Toucher un astre le nomme ; un curseur avance l'heure sur 12 h. Le catalogue est chargé à la demande (64 Ko compressés). Juge : Skyfield + DE421 (`bench/stars_reference.py`) sur 20 étoiles et 3 dates de 2026 à 2030, écart maximal 0,37′ (moyen 0,30′) pour un objectif de 1′.
+2. **« Tonight, the best to see »** : passages de l'ISS, planètes à leur plus haut, rapprochements à moins de 4°, cœur de la Voie lactée, essaims d'étoiles filantes actifs (liste de travail de l'IMO, taux attendu en ville), lever de Lune sur la mer, éclipses à 14 jours. Chacun a une heure, une direction et un score de visibilité qui combine les nuages par couche (Open-Meteo), la Lune pour ce qui est pâle et la hauteur. Le score est expérimental.
+3. **À faire** : notification « Look up now » et bilan après coup. Les nuages réels (Himawari) et les votes « Saw it? » jugeront le score, avec un accord go/no-go visé d'au moins 80 % sur un mois. Les étoiles sont aussi à ajouter au Sky finder.

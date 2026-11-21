@@ -1,4 +1,7 @@
-import type { Iss, SourceEntry, SpaceWeather, Sunrise } from "@maroubra/core";
+import type { Iss, SourceEntry, SpaceWeather, Sunrise, WeatherHour } from "@maroubra/core";
+import { useEffect, useMemo, useState } from "react";
+import { SkyChart, type Catalog } from "../components/SkyChart";
+import { nightWindow, skyEvents, type SkyEvent } from "../lib/sky-events";
 import { Fresh } from "../components/bits";
 import { HorizonChart } from "../components/HorizonChart";
 import { auroraText } from "./FireAir";
@@ -20,7 +23,51 @@ export function skyLede(s: SkyModel): string {
 
 type E<T> = (SourceEntry<T> & { stale: boolean; ageMin: number | null }) | null;
 
-export function Sky({ s, iss, space, sunrise }: { s: SkyModel; iss?: E<Iss>; space?: E<SpaceWeather>; sunrise?: E<Sunrise> }) {
+const EVENT_ICON: Record<SkyEvent["kind"], string> = { iss: "ISS", planet: "Planet", milkyway: "Milky Way", meteors: "Meteors", moon: "Moon", conjunction: "Pair", eclipse: "Eclipse" };
+
+/** Catalogue d'étoiles chargé seulement sur cette page (180 Ko). */
+function useCatalog(): Catalog | null {
+  const [c, setC] = useState<Catalog | null>(null);
+  useEffect(() => { void import("../data/sky-catalog.json").then((m) => setC(m.default as unknown as Catalog)); }, []);
+  return c;
+}
+
+function TonightBest({ events }: { events: SkyEvent[] }) {
+  const best = events.filter((e) => e.score != null).reduce<SkyEvent | null>((m, e) => (!m || e.score! > m.score! ? e : m), null);
+  return (
+    <div className="card">
+      <h2>Tonight, the best to see</h2>
+      {events.length ? (
+        <ol className="sky-events">
+          {events.map((e) => (
+            <li key={e.key} className={e === best && (e.score ?? 0) >= 5 ? "top" : undefined}>
+              <span className="sky-ev-when">{time(e.at)}{e.until ? <small>to {time(e.until)}</small> : null}</span>
+              <span className="sky-ev-what">
+                <span className="sky-ev-kind">{EVENT_ICON[e.kind]}</span>
+                <strong>{e.title}</strong>
+                <span className="sky-ev-detail">{e.detail}. Look {compass(e.az)}{e.alt > 2 ? `, ${Math.round(e.alt)}° up` : ", on the horizon"}.</span>
+              </span>
+              <span className={`sky-ev-score${e.score == null ? " unknown" : e.score >= 7 ? " good" : e.score >= 4 ? " maybe" : " poor"}`} title={e.why}>
+                {e.score == null ? "?" : e.score.toFixed(1)}
+                <small>{e.score == null ? "clouds unknown" : e.score >= 7 ? "good chance" : e.score >= 4 ? "maybe" : "unlikely"}</small>
+              </span>
+            </li>
+          ))}
+        </ol>
+      ) : <p className="muted" style={{ margin: 0 }}>Nothing special tonight beyond the stars themselves.</p>}
+      <p className="note">Visibility score from the cloud forecast by layer, the Moon (for faint things) and height in the sky. Experimental: being checked against real cloud cover. Meteor dates from the IMO working list.</p>
+    </div>
+  );
+}
+
+export function Sky({ s, iss, space, sunrise, hours }: { s: SkyModel; iss?: E<Iss>; space?: E<SpaceWeather>; sunrise?: E<Sunrise>; hours?: WeatherHour[] | null }) {
+  const catalog = useCatalog();
+  const events = useMemo(() => skyEvents(s.now, s, iss?.data ?? null, hours ?? null), [s.now.getTime(), iss?.data, hours]);
+  // Heure de la carte : maintenant la nuit ; le jour, la nuit noire qui vient. Curseur sur 12 h par quarts d'heure.
+  const night0 = useMemo(() => nightWindow(s.now).start, [Math.floor(s.now.getTime() / 600e3)]);
+  const base = s.isNight ? s.now : night0;
+  const [offset, setOffset] = useState(0);
+  const chartAt = new Date(base.getTime() + offset * 15 * 60e3);
   const passes = iss?.data?.passes.filter((p) => Date.parse(p.end) > s.now.getTime()).slice(0, 4) ?? [];
   const sr = sunrise?.data;
   return (
@@ -28,6 +75,19 @@ export function Sky({ s, iss, space, sunrise }: { s: SkyModel; iss?: E<Iss>; spa
       <div className="card">
         <h1 id="sky-title" style={{ margin: "0 0 8px", fontSize: 15, color: "var(--muted)" }}>{s.isNight ? "Tonight over Maroubra" : "The sky over Maroubra"}</h1>
         <p className="lede">{skyLede(s)}</p>
+      </div>
+      <TonightBest events={events} />
+      <div className="card sky-chart-card">
+        <div className="card-head">
+          <h2>The sky at {time(chartAt)}{chartAt.getTime() - s.now.getTime() > 3600e3 ? ` ${shortDate(chartAt).split(",")[0]}` : ""}</h2>
+          <label className="sky-time">
+            <span className="sr-only">Time of the sky chart</span>
+            <input type="range" min={0} max={48} step={1} value={offset} onChange={(e) => setOffset(Number(e.target.value))} />
+            <button className="btn ghost small" onClick={() => setOffset(0)} disabled={offset === 0}>{s.isNight ? "Now" : "Tonight"}</button>
+          </label>
+        </div>
+        {catalog ? <SkyChart catalog={catalog} at={chartAt} night={s.isNight} /> : <div className="skychart-wait" aria-busy="true">Loading the star catalogue…</div>}
+        <p className="note">Stars to magnitude 5 from the Hipparcos catalogue (d3-celestial data), positions checked against Skyfield to under 1 arcminute.</p>
       </div>
       <div className="card chart-scroll" style={{ padding: 12 }}>
         <HorizonChart sun={s.tracks.sun} moon={s.tracks.moon} planets={s.tracks.planets} summary={skyLede(s)} />
