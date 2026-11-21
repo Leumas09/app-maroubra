@@ -3,7 +3,7 @@
 const { chromium } = require("playwright");
 const launch = () => chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
 const { default: AxeBuilder } = require("@axe-core/playwright");
-const views = ["home", "weather", "beach", "sea", "sky", "overhead", "fire", "news", "track", "settings"];
+const views = ["home", "weather", "beach", "sky", "overhead", "fire", "news", "track", "settings"];
 (async () => {
   const browser = await launch();
   let total = 0;

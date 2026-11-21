@@ -555,3 +555,12 @@ Constat en production après la mise en ligne de la partie J : `/health` afficha
 | Écartée | airplanes.live : refuse l'accès sans accord préalable (« Please contact us at contact@airplanes.live ») | Réponse 403 du 20/11/2026 |
 
 À terme, l'antenne maison (partie sur les sources) donnerait une clé adsb.lol et des positions vraiment locales.
+
+## Partie L : Beach et Sea réunies, statut de la plage sur l'accueil (21 novembre 2026)
+
+Demandes de Samuel :
+- **Sea dans Beach.** La page Sea avait peu de contenu : marée, houle mesurée et prévue, bouée et prochaines marées forment maintenant la section « The sea » en bas de Beach. L'onglet disparaît ; un ancien lien `#sea` ouvre Beach.
+- **Score de baignade discret.** C'est un calcul : le grand cadran devient une pastille (point de couleur, score, libellé) dans le coin du verdict.
+- **Statut officiel sur l'accueil.** Bandeau compact sous l'heure (drapeau, « Closed: shark sighting », texte des sauveteurs), lien vers Beach ; la jauge Beach affiche « Closed » quand la plage est fermée.
+
+Juge : captures de toutes les vues (jour, nuit, trois formats) et axe sans violation ; plage fermée simulée sur tablette et téléphone.
