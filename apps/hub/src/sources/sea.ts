@@ -86,3 +86,17 @@ export const buoy: Collector<Buoy> = {
     return parseBuoyRows(rows);
   },
 };
+
+export const BUOY_POINT = { lat: -33.77, lon: 151.41 };
+
+/** Prévision de vagues au point exact de la bouée de Sydney, son juge. */
+export const buoyForecast: Collector<{ lat: number; lon: number; hourly: { t: number; hs: number | null }[] }> = {
+  id: "fc-buoy",
+  everyMs: 60 * 60e3,
+  staleAfterMs: 4 * 3600e3,
+  run: async ({ now }) => {
+    const q = new URLSearchParams({ latitude: String(BUOY_POINT.lat), longitude: String(BUOY_POINT.lon), timezone: "UTC", timeformat: "unixtime", forecast_days: "3", hourly: "wave_height" });
+    const j = await fetchJson<{ hourly: { time: number[]; wave_height: (number | null)[] } }>(`https://marine-api.open-meteo.com/v1/marine?${q}`);
+    return { ...BUOY_POINT, hourly: j.hourly.time.map((t, i) => ({ t, hs: j.hourly.wave_height[i] })).filter((x) => x.t >= now.getTime() / 1000 - 3600) };
+  },
+};

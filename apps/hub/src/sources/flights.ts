@@ -1,6 +1,6 @@
 // Avions autour de Maroubra : positions ADS-B d'adsb.lol (API v2, sans clé) et routes de son
 // service « routeset ». On déduit le mode de pistes de Sydney, le couvre-feu et les survols imminents.
-import type { Aircraft, Airport, Flights } from "@maroubra/core";
+import type { Aircraft, Airport, Flights, OverheadOutcome } from "@maroubra/core";
 import { SITE } from "../config";
 import { bearingDeg, destination, distanceKm } from "../geo";
 import { fetchJson } from "../http";
@@ -91,7 +91,61 @@ export function normalize(raw: RawAc[], routes: Map<string, RawRoute>, trails: M
     .sort((a, b) => a.distKm - b.distKm);
 }
 
-export function flightsCollector(): Collector<Flights> {
+/** Distance minimale (km) entre la maison et le segment parcouru entre deux positions (plan local). */
+export function segmentMinKm(a: [number, number], b: [number, number], home = SITE): number {
+  const kx = 111.32 * Math.cos((home.lat * Math.PI) / 180), ky = 110.57;
+  const ax = (a[1] - home.lon) * kx, ay = (a[0] - home.lat) * ky, bx = (b[1] - home.lon) * kx, by = (b[0] - home.lat) * ky;
+  const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+  const t = l2 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / l2)) : 0;
+  return Math.hypot(ax + t * dx, ay + t * dy);
+}
+
+/**
+ * Juge des annonces « overhead in N min » : chaque annonce est suivie sur la trace ADS-B réelle de l'avion
+ * jusqu'à 3 minutes après l'heure prévue. Réussie si l'avion est passé à moins de 1,5 km de la maison.
+ * Un avion perdu par le réseau avant l'heure prévue n'est pas compté (on ne sait pas).
+ */
+export class OverheadJudge {
+  private pending = new Map<string, { at: number; inMin: number; due: number; minKm: number; last: [number, number]; seen: number; callsign: string | null }>();
+  private recent = new Map<string, number>();
+  announced = 0;
+  hits = 0;
+  readonly since: string;
+  constructor(now = Date.now(), private hitKm = 1.5) { this.since = new Date(now).toISOString(); }
+
+  update(acs: Aircraft[], now = Date.now()): OverheadOutcome[] {
+    const out: OverheadOutcome[] = [];
+    for (const a of acs) {
+      if (a.onGround) continue;
+      const p = this.pending.get(a.hex);
+      if (p) {
+        p.minKm = Math.min(p.minKm, segmentMinKm(p.last, [a.lat, a.lon]));
+        p.last = [a.lat, a.lon];
+        p.seen = now;
+      } else if (a.overhead && a.overhead.inMin >= 1 && !(now - (this.recent.get(a.hex) ?? -Infinity) <= 20 * 60e3)) {
+        this.pending.set(a.hex, { at: now, inMin: a.overhead.inMin, due: now + a.overhead.inMin * 60e3, minKm: a.distKm, last: [a.lat, a.lon], seen: now, callsign: a.callsign });
+        this.recent.set(a.hex, now);
+      }
+    }
+    for (const [hex, p] of this.pending) {
+      const lost = now - p.seen > 60e3;
+      if (now > p.due + 3 * 60e3 || lost) {
+        this.pending.delete(hex);
+        const resolved = p.minKm <= this.hitKm || p.seen >= p.due + 60e3;
+        if (!resolved) continue; // perdu avant l'heure prévue : on ne sait pas
+        const hit = p.minKm <= this.hitKm;
+        this.announced++;
+        if (hit) this.hits++;
+        out.push({ hex, callsign: p.callsign, at: new Date(p.at).toISOString(), inMin: p.inMin, minKm: Math.round(p.minKm * 100) / 100, hit });
+      }
+    }
+    for (const [hex, t] of this.recent) if (now - t > 60 * 60e3) this.recent.delete(hex);
+    return out;
+  }
+}
+
+export function flightsCollector(onOutcome: (o: OverheadOutcome) => void = () => {}): Collector<Flights> {
+  const judge = new OverheadJudge();
   const routes = new Map<string, RawRoute & { at: number }>();
   const trails = new Map<string, [number, number][]>();
   const seen = new Map<string, string>(); // hex vu aujourd'hui (jour de Sydney)
@@ -125,7 +179,8 @@ export function flightsCollector(): Collector<Flights> {
       for (const [hex, d] of seen) if (d !== day) seen.delete(hex);
       const aircraft = normalize(raw, routes, trails);
       for (const a of aircraft) if (a.distKm <= 10 && !a.onGround) seen.set(a.hex, day);
-      return { aircraft, runway: runwayMode(aircraft), curfew: isCurfew(now), seenToday: seen.size };
+      for (const o of judge.update(aircraft, now.getTime())) onOutcome(o);
+      return { aircraft, runway: runwayMode(aircraft), curfew: isCurfew(now), seenToday: seen.size, judged: { announced: judge.announced, hits: judge.hits, since: judge.since } };
     },
   };
 }

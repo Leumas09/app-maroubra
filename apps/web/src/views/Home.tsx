@@ -1,4 +1,5 @@
 // Accueil (direction B « Instrument ») : l'heure, une phrase, le ciel tracé, les niveaux et les prochains moments.
+import { useState } from "react";
 import type { Beach, Buoy, Marine, SourceEntry, SpaceWeather, Sunrise, Weather } from "@maroubra/core";
 import { HorizonChart } from "../components/HorizonChart";
 import { compass, longDate, pct, time } from "../lib/format";
@@ -32,6 +33,49 @@ function Gauge({ g }: { g: Level }) {
       </div>
       <div className="gauge-label">{g.label}</div>
       <div className="gauge-sub">{g.sub}</div>
+    </div>
+  );
+}
+
+const localDay = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "Australia/Sydney" }).format(d);
+const localHour = (d: Date) => Number(new Intl.DateTimeFormat("en-AU", { hour: "numeric", hourCycle: "h23", timeZone: "Australia/Sydney" }).format(d));
+const store = {
+  get: (k: string) => { try { return localStorage.getItem(k); } catch { return null; } },
+  set: (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* stockage indisponible */ } },
+};
+function voterId(): string {
+  let id = store.get("mb.voter");
+  if (!id) { id = crypto.randomUUID?.() ?? String(Math.random()).slice(2); store.set("mb.voter", id); }
+  return id;
+}
+
+/**
+ * Le juge du score de lever de soleil : chaque matin, la famille dit si le lever valait le coup.
+ * Visible une fois le Soleil levé et jusqu'à 11 h, une fois par appareil.
+ */
+function SunriseVote({ now, sunAlt }: { now: Date; sunAlt: number }) {
+  const day = localDay(now);
+  const [done, setDone] = useState(() => store.get("mb.voted") === day);
+  const [msg, setMsg] = useState<string | null>(null);
+  if (sunAlt < 3 || localHour(now) >= 11 || (done && !msg)) return null;
+  const vote = async (value: number | null) => {
+    store.set("mb.voted", day);
+    setDone(true);
+    if (value == null) { setMsg("No problem. Ask again tomorrow."); return; }
+    const r = await fetch("/api/vote", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ date: day, value, voter: voterId() }) }).catch(() => null);
+    setMsg(r?.ok ? "Thanks. Your vote checks the sunrise score in the Track record." : "Could not save the vote.");
+  };
+  return (
+    <div className="vote" role="group" aria-labelledby="vote-q">
+      <span id="vote-q">{msg ?? "This morning's sunrise: worth getting up for?"}</span>
+      {!msg && (
+        <span className="vote-buttons">
+          <button className="btn" onClick={() => vote(2)}>Yes</button>
+          <button className="btn ghost" onClick={() => vote(1)}>So-so</button>
+          <button className="btn ghost" onClick={() => vote(0)}>No</button>
+          <button className="btn ghost" onClick={() => vote(null)}>Didn't see it</button>
+        </span>
+      )}
     </div>
   );
 }
@@ -106,6 +150,8 @@ export function Home({ now, sky, brief, beach, weather, buoy, marine, sunrise, s
           {sub && <p>{sub}</p>}
         </div>
       </div>
+
+      {sky && <SunriseVote now={now} sunAlt={sky.sunAltNow} />}
 
       <div className="band chart-scroll">
         {sky ? <HorizonChart sun={sky.tracks.sun} moon={sky.tracks.moon} planets={sky.tracks.planets} summary={skyLede(sky)} /> : <div style={{ minHeight: 200 }} aria-busy="true" />}

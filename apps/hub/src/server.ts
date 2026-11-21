@@ -3,6 +3,7 @@ import { Hono, type Context } from "hono";
 import { compress } from "hono/compress";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { streamSSE } from "hono/streaming";
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Auth, clientIp, COOKIE, LoginLimiter } from "./auth";
@@ -15,7 +16,9 @@ import type { Store } from "./store";
 export const SSE_MAX_MS = 200_000;
 const SSE_HEARTBEAT_MS = 15_000;
 
-export function createApp(cfg: Config, store: Store, deps: { push?: Push } = {}) {
+export interface Vote { date: string; value: number; voter: string }
+
+export function createApp(cfg: Config, store: Store, deps: { push?: Push; vote?: (v: Vote) => Promise<void> } = {}) {
   const app = new Hono();
   const auth = new Auth(cfg.password!, cfg.sessionSecret);
   const limiter = new LoginLimiter();
@@ -118,6 +121,22 @@ export function createApp(cfg: Config, store: Store, deps: { push?: Push } = {})
         unsubscribe();
       }
     });
+  });
+
+  // Vote du matin sur le lever de soleil : le juge du score de lever de soleil.
+  app.post("/api/vote", async (c) => {
+    const body = await c.req.json().catch(() => null);
+    const date = String(body?.date ?? "");
+    const value = Number(body?.value);
+    const voter = String(body?.voter ?? "");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || ![0, 1, 2].includes(value) || !voter || voter.length > 64) return c.json({ error: "bad vote" }, 400);
+    // Un vote par appareil et par matin, seulement pour hier ou aujourd'hui (jour de Sydney).
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Australia/Sydney" }).format(new Date());
+    const yesterday = new Intl.DateTimeFormat("en-CA", { timeZone: "Australia/Sydney" }).format(new Date(Date.now() - 86400e3));
+    if (date !== today && date !== yesterday) return c.json({ error: "too late" }, 400);
+    const id = createHash("sha256").update(voter).digest("hex").slice(0, 16);
+    await deps.vote?.({ date, value, voter: id });
+    return c.json({ ok: true });
   });
 
   if (deps.push) {

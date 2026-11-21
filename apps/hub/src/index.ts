@@ -1,6 +1,6 @@
 import { serve } from "@hono/node-server";
 import type { Beach, Buoy, Fires, Flights, Iss, Marine, Moment, SpaceWeather, Sunrise, Weather } from "@maroubra/core";
-import { archiveHour } from "./archive";
+import { archiveHour, archiveOutcome, archiveReader, archiveVote, memoryArchive, tableArchive, type ArchiveTable } from "./archive";
 import { startCollectors, type Collector } from "./collector";
 import { loadConfig } from "./config";
 import { beach } from "./derive/beach";
@@ -8,6 +8,7 @@ import { facts, writeBrief } from "./derive/brief";
 import { due, moments } from "./derive/moments";
 import { sunrise } from "./derive/sunrise";
 import { loadTide } from "./derive/tide";
+import { verify } from "./derive/verify";
 import { foundryLlm } from "./llm";
 import { Push } from "./push";
 import { createApp } from "./server";
@@ -15,8 +16,8 @@ import { flightsCollector } from "./sources/flights";
 import { air, fires, space } from "./sources/hazards";
 import { issCollector } from "./sources/iss";
 import { newsCollector } from "./sources/news";
-import { buoy, marine } from "./sources/sea";
-import { metar, weather } from "./sources/weather";
+import { buoy, buoyForecast, marine } from "./sources/sea";
+import { airportForecast, metar, weather } from "./sources/weather";
 import { Store } from "./store";
 import { azureCredential, table } from "./tables";
 
@@ -28,6 +29,11 @@ const push = cfg.vapid.publicKey && cfg.vapid.privateKey
   ? new Push({ publicKey: cfg.vapid.publicKey, privateKey: cfg.vapid.privateKey, subject: cfg.vapid.subject }, table(cfg.tableEndpoint, "push", cfg.managedIdentityClientId))
   : null;
 await push?.load();
+
+// Archive : Table Storage en production, mémoire en local (le Track record vivant fonctionne aussi en développement).
+const archiveClient = table(cfg.tableEndpoint, "archive", cfg.managedIdentityClientId);
+const archive: ArchiveTable | null = archiveClient ? tableArchive(archiveClient) : cfg.offline ? null : memoryArchive();
+const loadArchive = archive ? archiveReader(archive) : null;
 
 const tideNext = (now: Date) => {
   const e = tide.find((x) => x.t * 1000 > now.getTime());
@@ -56,6 +62,17 @@ const derived: Collector[] = [
     },
   },
   {
+    // Track record en production : relu dans l'archive toutes les 3 heures (30 jours glissants).
+    id: "verify", everyMs: 3 * 3600e3, staleAfterMs: 12 * 3600e3,
+    run: async ({ now }) => {
+      if (!loadArchive) throw new Error("no archive");
+      const t0 = Date.now();
+      const v = verify(await loadArchive(now), now.getTime() / 1000);
+      console.log(JSON.stringify({ event: "verified", ms: Date.now() - t0, temp: v.correction.temp.why, wind: v.correction.wind.why, n: v.scores.map((x) => `${x.key}:${x.n}`).join(",") }));
+      return v;
+    },
+  },
+  {
     id: "brief", everyMs: 30 * 60e3, staleAfterMs: 2 * 3600e3,
     run: async ({ store: s, now }) => {
       if (!s.data("weather")) throw new Error("waiting for weather");
@@ -65,7 +82,7 @@ const derived: Collector[] = [
 ];
 
 const collectors: Collector[] = [
-  weather, metar, marine, buoy, flightsCollector(), fires, air, space, issCollector(), sunrise, newsCollector(llm), ...derived,
+  weather, metar, marine, buoy, airportForecast, buoyForecast, flightsCollector((o) => void archiveOutcome(archive, o)), fires, air, space, issCollector(), sunrise, newsCollector(llm), ...derived,
 ];
 startCollectors(store, collectors, { offline: cfg.offline });
 
@@ -78,14 +95,13 @@ if (cfg.offline && demoPath) {
   for (const [id, d] of Object.entries(demo)) store.success(id, d);
 }
 
-// Archive horaire (Table Storage), première écriture 5 minutes après le démarrage.
-const archive = table(cfg.tableEndpoint, "archive", cfg.managedIdentityClientId);
+// Archive horaire, première écriture 5 minutes après le démarrage.
 if (archive && !cfg.offline) {
   const tick = () => archiveHour(archive, store).then((n) => console.log(JSON.stringify({ event: "archived", rows: n })));
   setTimeout(() => { tick(); setInterval(tick, 3600e3); }, 5 * 60e3);
 }
 
-const app = createApp(cfg, store, { push: push ?? undefined });
+const app = createApp(cfg, store, { push: push ?? undefined, vote: (v) => archiveVote(archive, v) });
 serve({ fetch: app.fetch, port: cfg.port }, (info) => {
   console.log(JSON.stringify({ event: "listening", port: info.port, version: cfg.version, llm: !!llm, push: !!push, archive: !!archive }));
 });

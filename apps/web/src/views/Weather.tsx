@@ -8,7 +8,7 @@ function HourChart({ w }: { w: W }) {
   const hrs = w.hourly.slice(0, 25);
   if (hrs.length < 2) return null;
   const Wd = 1000, H = 220, P = 30;
-  const temps = hrs.map((h) => h.temp);
+  const temps = hrs.flatMap((h) => [h.temp, h.tempRaw ?? h.temp]);
   const lo = Math.floor(Math.min(...temps) - 1), hi = Math.ceil(Math.max(...temps) + 1);
   const x = (i: number) => P + (i / (hrs.length - 1)) * (Wd - 2 * P);
   const y = (t: number) => 30 + (1 - (t - lo) / (hi - lo)) * (H - 90);
@@ -18,6 +18,9 @@ function HourChart({ w }: { w: W }) {
       {hrs.map((h, i) => h.precip > 0 && (
         <rect key={`r${h.t}`} x={x(i) - 12} width="24" y={H - 26 - (h.precip / maxP) * 50} height={(h.precip / maxP) * 50} rx="4" fill="var(--accent)" opacity="0.55" />
       ))}
+      {hrs.some((h) => h.tempRaw != null) && (
+        <path d={hrs.map((h, i) => `${i ? "L" : "M"}${x(i)},${y(Math.max(lo, Math.min(hi, h.tempRaw ?? h.temp)))}`).join(" ")} fill="none" stroke="var(--muted)" strokeWidth="1.5" strokeDasharray="4 5" />
+      )}
       <path d={hrs.map((h, i) => `${i ? "L" : "M"}${x(i)},${y(h.temp)}`).join(" ")} fill="none" stroke="var(--sun)" strokeWidth="3" />
       {hrs.map((h, i) => i % 3 === 0 && (
         <g key={h.t}>
@@ -58,6 +61,11 @@ export function Weather({ e, metar, air, night }: { e: E<W>; metar: E<Metar>; ai
       <div className="card chart-scroll" style={{ padding: 12 }}>
         <HourChart w={w} />
       </div>
+      {w.corrected && (
+        <p className="note" style={{ margin: 0 }}>
+          {w.corrected.note} The dashed line is the raw model. <a href="#track">How we check this</a>.
+        </p>
+      )}
       <div className="grid">
         <div className="card">
           <h2>Next 7 days</h2>

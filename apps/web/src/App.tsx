@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { AirQuality, Beach as BeachData, Brief, Buoy, Fires, Flights, Iss, Marine, Metar, Moment, News as NewsData, SpaceWeather, Sunrise, Weather as WeatherData } from "@maroubra/core";
+import type { AirQuality, Beach as BeachData, Brief, Buoy, Fires, Flights, Iss, Marine, Metar, Moment, News as NewsData, SpaceWeather, Sunrise, Verification, Weather as WeatherData } from "@maroubra/core";
 import { data, entry, isDemo, useLive } from "./lib/live";
 import type { SkyModel } from "./lib/sky-model";
 import { loadTide, type TideTable } from "./lib/tide";
@@ -149,7 +149,7 @@ export function App() {
         {current === "overhead" && <Overhead e={flights} />}
         {current === "fire" && <FireAir fires={fires} />}
         {current === "news" && <News e={news} now={now} />}
-        {current === "track" && <TrackRecord />}
+        {current === "track" && <TrackRecord live={entry<Verification>(snap, "verify")} />}
         {current === "settings" && <Settings ambient={ambient} setAmbient={setAmbient} />}
       </main>
     </div>
