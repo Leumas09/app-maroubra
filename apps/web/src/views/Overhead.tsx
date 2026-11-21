@@ -1,177 +1,238 @@
-import type { Aircraft, Flights, SourceEntry } from "@maroubra/core";
-import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import type { Aircraft, AircraftPhoto, Flights, SourceEntry } from "@maroubra/core";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CardHead, Empty, Fresh } from "../components/bits";
-import land from "../data/sydney-land.json";
+import { FlightMap, HOME, label, type Base } from "../components/FlightMap";
+import { requestMotion, SkyFinder } from "../components/SkyFinder";
 import { compass } from "../lib/format";
+import { distanceKm, Motion } from "../lib/motion";
 
 type E<T> = (SourceEntry<T> & { stale: boolean; ageMin: number | null }) | null;
 
-const HOME = { lat: -33.9496, lon: 151.2577 };
-const YSSY = { lat: -33.9461, lon: 151.1772 };
-// Projection équirectangulaire locale centrée sur Maroubra, 30 km de rayon environ.
-const SPAN_LON = 0.5, SPAN_LAT = SPAN_LON * Math.cos((HOME.lat * Math.PI) / 180);
-const W = 1000, H = 640;
-const sx = (lon: number) => W / 2 + ((lon - HOME.lon) / SPAN_LON) * W;
-const sy = (lat: number) => H / 2 - ((lat - HOME.lat) / SPAN_LAT) * W;
-const kmPx = (km: number) => (km / 111.32 / SPAN_LAT) * W;
-
-function landPath(): string {
-  const g = land.geometry as { type: string; coordinates: number[][][][] | number[][][] };
-  const polys = (g.type === "Polygon" ? [g.coordinates] : g.coordinates) as number[][][][];
-  return polys.map((poly) => poly.map((ring) => ring.map(([lo, la], i) => `${i ? "L" : "M"}${sx(lo).toFixed(1)},${sy(la).toFixed(1)}`).join(" ") + " Z").join(" ")).join(" ");
-}
-const LAND = landPath();
-
-const PLANE = "M12 2l1.6 7 7.4 4v2l-7.4-2.5-.6 5.5 2.5 2v1.5L12 20.5 8.5 21.5V20l2.5-2-.6-5.5L3 15v-2l7.4-4z";
 const ft = (a: Aircraft) => (a.onGround ? "on ground" : a.altFt != null ? `${a.altFt.toLocaleString("en-AU")} ft` : "n/a");
+/** Altitude en pieds puis en mètres (fiche de l'avion). */
+const ftM = (a: Aircraft) => (a.onGround || a.altFt == null ? ft(a) : `${ft(a)} (${Math.round(a.altFt * 0.3048).toLocaleString("en-AU")} m)`);
+const hm = (ms: number) => new Intl.DateTimeFormat("en-AU", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "Australia/Sydney" }).format(ms);
+const NONE: Aircraft[] = [];
+const nf = (n: number) => n.toLocaleString("en-AU");
 
-// Vue de la carte en unités SVG : centre et largeur visible. Bornes : la côte GSHHG chargée s'arrête
-// à 150,95° E (x = -115) ; les avions suivis restent à moins de 46 km.
-type View = { cx: number; cy: number; w: number };
-const X0 = -115, X1 = 1500, Y0 = -1000, Y1 = 1600, MIN_W = 140, MAX_W = 1400;
-const clamp = (x: number, a: number, b: number) => Math.max(a, Math.min(b, x));
-function bound(v: View, aspect: number): View {
-  const w = clamp(v.w, MIN_W, MAX_W), h = w * aspect;
-  return { w, cx: clamp(v.cx, X0 + w / 2, X1 - w / 2), cy: clamp(v.cy, Y0 + h / 2, Y1 - h / 2) };
-}
+/** « BOEING 737-800 » devient « Boeing 737-800 » ; les sigles courts restent en capitales. */
+const titleCase = (s: string) => s.split(/\s+/).map((w) => (/\d/.test(w) || w.length <= 3 ? w : w[0] + w.slice(1).toLowerCase())).join(" ");
 
-function useWidth(ref: RefObject<HTMLElement>): number {
-  const [w, setW] = useState(0);
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    setW(el.clientWidth);
-    const ro = new ResizeObserver(([e]) => setW(e.contentRect.width));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [ref]);
-  return w;
-}
+const store = {
+  get: (k: string) => { try { return localStorage.getItem(k); } catch { return null; } },
+  set: (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* ignoré */ } },
+};
 
-function PlaneMap({ f, sel, pick }: { f: Flights; sel: string | null; pick: (hex: string) => void }) {
-  const box = useRef<HTMLDivElement>(null);
-  const svg = useRef<SVGSVGElement>(null);
-  const pxW = useWidth(box) || W;
-  const narrow = pxW < 600;
-  // Téléphone : carte carrée, ouverte sur l'anneau des 10 km ; ordinateur : tout le cadre.
-  const aspect = narrow ? 1 : H / W;
-  const home: View = { cx: sx(HOME.lon), cy: sy(HOME.lat), w: narrow ? 520 : W };
-  const [view, setView] = useState<View | null>(null); // null : vue par défaut, centrée sur Maroubra
-  const v = view ?? home;
-  const vh = v.w * aspect;
-  const k = v.w / pxW; // unités SVG par pixel d'écran : textes et symboles gardent leur taille à l'écran
-  const left = v.cx - v.w / 2, top = v.cy - vh / 2;
-
-  const zoomAt = (factor: number, px = pxW / 2, py = (pxW * aspect) / 2, from = v) => {
-    const kk = from.w / pxW;
-    const ux = from.cx - from.w / 2 + px * kk, uy = from.cy - (from.w * aspect) / 2 + py * kk;
-    const w = clamp(from.w / factor, MIN_W, MAX_W), r = w / from.w;
-    setView(bound({ w, cx: ux + (from.cx - ux) * r, cy: uy + (from.cy - uy) * r }, aspect));
-  };
-
-  // Glisser pour déplacer, pincer pour zoomer. Un glissement n'ouvre pas l'avion sous le doigt.
-  const pts = useRef(new Map<number, { x: number; y: number }>());
-  const start = useRef<{ v: View; pts: { x: number; y: number }[] } | null>(null);
-  const moved = useRef(false);
-  const local = (e: React.PointerEvent) => { const r = svg.current!.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
-  const begin = () => { start.current = { v, pts: [...pts.current.values()] }; };
-  const onDown = (e: React.PointerEvent) => { pts.current.set(e.pointerId, local(e)); moved.current = false; begin(); };
-  const onMove = (e: React.PointerEvent) => {
-    if (!pts.current.has(e.pointerId) || !start.current) return;
-    pts.current.set(e.pointerId, local(e));
-    const now = [...pts.current.values()], s0 = start.current;
-    if (now.length !== s0.pts.length) return begin();
-    const kk = s0.v.w / pxW;
-    if (now.length === 1) {
-      const dx = now[0].x - s0.pts[0].x, dy = now[0].y - s0.pts[0].y;
-      if (!moved.current && Math.hypot(dx, dy) < 5) return;
-      if (!moved.current) { moved.current = true; svg.current!.setPointerCapture(e.pointerId); }
-      setView(bound({ w: s0.v.w, cx: s0.v.cx - dx * kk, cy: s0.v.cy - dy * kk }, aspect));
-    } else if (now.length === 2) {
-      moved.current = true;
-      const d0 = Math.hypot(s0.pts[0].x - s0.pts[1].x, s0.pts[0].y - s0.pts[1].y) || 1;
-      const d1 = Math.hypot(now[0].x - now[1].x, now[0].y - now[1].y) || 1;
-      const m0 = { x: (s0.pts[0].x + s0.pts[1].x) / 2, y: (s0.pts[0].y + s0.pts[1].y) / 2 };
-      const m1 = { x: (now[0].x + now[1].x) / 2, y: (now[0].y + now[1].y) / 2 };
-      const ux = s0.v.cx - s0.v.w / 2 + m0.x * kk, uy = s0.v.cy - (s0.v.w * aspect) / 2 + m0.y * kk;
-      const w = clamp(s0.v.w * (d0 / d1), MIN_W, MAX_W), k1 = w / pxW;
-      setView(bound({ w, cx: ux - m1.x * k1 + w / 2, cy: uy - m1.y * k1 + (w * aspect) / 2 }, aspect));
-    }
-  };
-  const onUp = (e: React.PointerEvent) => { pts.current.delete(e.pointerId); begin(); };
-
-  // Molette : seulement avec Ctrl (ou le pincement du pavé tactile), pour ne pas piéger le défilement de la page.
-  const wheel = useRef<(e: WheelEvent) => void>(() => {});
-  wheel.current = (e: WheelEvent) => {
-    if (!e.ctrlKey && !e.metaKey) return;
-    e.preventDefault();
-    const r = svg.current!.getBoundingClientRect();
-    zoomAt(Math.exp(-e.deltaY / 200), e.clientX - r.left, e.clientY - r.top);
-  };
+// Photos déjà demandées pendant la session (une requête par avion).
+const photos = new Map<string, Promise<AircraftPhoto | null>>();
+function usePhoto(hex: string, reg: string | null, typeName: string | null): AircraftPhoto | null | undefined {
+  const [p, setP] = useState<AircraftPhoto | null | undefined>(undefined);
   useEffect(() => {
-    const el = svg.current;
-    if (!el) return;
-    const h = (e: WheelEvent) => wheel.current(e);
-    el.addEventListener("wheel", h, { passive: false });
-    return () => el.removeEventListener("wheel", h);
-  }, []);
+    let live = true;
+    setP(undefined);
+    if (!/^[0-9a-f]{6}$/i.test(hex)) { setP(null); return; }
+    const key = `${hex}|${reg ?? ""}|${typeName ?? ""}`;
+    if (!photos.has(key)) {
+      const q = new URLSearchParams({ ...(reg ? { reg } : {}), ...(typeName ? { type: typeName } : {}) });
+      photos.set(key, fetch(`/api/aircraft/${hex}/photo?${q}`, { credentials: "same-origin" })
+        .then((r) => (r.ok ? r.json() : { photo: null })).then((j: { photo: AircraftPhoto | null }) => j.photo).catch(() => null));
+    }
+    photos.get(key)!.then((x) => live && setP(x));
+    return () => { live = false; };
+  }, [hex, reg, typeName]);
+  return p;
+}
 
-  const changed = view != null && (Math.abs(view.w - home.w) > 1 || Math.hypot(view.cx - home.cx, view.cy - home.cy) > 2);
+/** Trace complète de l'avion choisi (jusqu'à 3 h, enregistrée par le hub), relue toutes les 15 s. */
+function useTrace(hex: string | null, enabled: boolean): { points: [number, number][]; tookOffAt: number | null } | null {
+  const [t, setT] = useState<{ points: [number, number][]; tookOffAt: number | null } | null>(null);
+  useEffect(() => {
+    setT(null);
+    if (!hex || !enabled) return;
+    let live = true;
+    const load = () => fetch(`/api/aircraft/${encodeURIComponent(hex)}/trace`, { credentials: "same-origin" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: { points: [number, number, number, number | null][]; tookOffAt: number | null } | null) => {
+        if (live && j) setT({ points: j.points.map((p) => [p[1], p[2]]), tookOffAt: j.tookOffAt });
+      }).catch(() => {});
+    void load();
+    const id = setInterval(load, 15_000);
+    return () => { live = false; clearInterval(id); };
+  }, [hex, enabled]);
+  return t;
+}
+
+/** Texte blanc ou presque noir sur la couleur de la compagnie, selon ce qui contraste le mieux (WCAG). */
+function inkOn(hex: string): string {
+  const lin = (c: number) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+  const [r, g, b] = [1, 3, 5].map((i) => lin(parseInt(hex.slice(i, i + 2), 16) / 255));
+  const l = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return 1.05 / (l + 0.05) >= 4.5 ? "#fff" : "#141414";
+}
+
+/** Rayon du relevé de la maison (25 milles nautiques) : au-delà, la carte demande la zone visible. */
+const HOME_KM = 46;
+type View = { lat: number; lon: number; radiusKm: number };
+
+/**
+ * Avions de la zone visible quand la carte sort des environs de la maison : une requête toutes les 10 s
+ * tant que la vue ne bouge pas, et des traces construites ici à partir des positions successives.
+ */
+function useAreaAircraft(view: View | null, enabled: boolean): Aircraft[] {
+  const [list, setList] = useState<Aircraft[]>([]);
+  const trails = useRef(new Map<string, [number, number][]>());
+  const outside = !!view && distanceKm(view.lat, view.lon, HOME[0], HOME[1]) + view.radiusKm > HOME_KM;
+  useEffect(() => {
+    if (!view || !outside || !enabled) { setList([]); return; }
+    let live = true;
+    const load = async () => {
+      const r = await fetch(`/api/aircraft/area?lat=${view.lat.toFixed(3)}&lon=${view.lon.toFixed(3)}&r=${Math.ceil(view.radiusKm / 1.852)}`, { credentials: "same-origin" }).catch(() => null);
+      const j = r?.ok ? ((await r.json()) as { aircraft?: Aircraft[] }) : null;
+      if (!live || !j?.aircraft) return;
+      const seen = new Set<string>();
+      setList(j.aircraft.map((a) => {
+        seen.add(a.hex);
+        const t = trails.current.get(a.hex) ?? [];
+        const last = t.at(-1);
+        if (!last || last[0] !== a.lat || last[1] !== a.lon) t.push([a.lat, a.lon]);
+        trails.current.set(a.hex, t.slice(-60));
+        return { ...a, trail: trails.current.get(a.hex)! };
+      }));
+      for (const hex of trails.current.keys()) if (!seen.has(hex)) trails.current.delete(hex);
+    };
+    void load();
+    const id = setInterval(load, 10_000);
+    return () => { live = false; clearInterval(id); };
+  }, [view, outside, enabled]);
+  return list;
+}
+
+function AirlineBadge({ a }: { a: Aircraft }) {
+  if (!a.airline) return null;
+  return <span className="airline-badge" style={{ background: a.airline.color, color: inkOn(a.airline.color) }} aria-hidden="true">{a.airline.iata}</span>;
+}
+
+function Photo({ a }: { a: Aircraft }) {
+  const typeName = a.desc ? titleCase(a.desc) : a.type;
+  const p = usePhoto(a.hex, a.reg, typeName);
+  if (p === null) return null;
+  const similar = p?.kind === "type";
   return (
-    <div ref={box} className="map-box">
-      <svg ref={svg} className="chart map" viewBox={`${left} ${top} ${v.w} ${vh}`} role="img" aria-label={`Map of ${f.aircraft.length} aircraft around Maroubra`}
-        onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
-        onClickCapture={(e) => { if (moved.current) { e.stopPropagation(); moved.current = false; } }}>
-        <rect x={left} y={top} width={v.w} height={vh} fill="var(--sea)" />
-        <path d={LAND} fill="var(--land)" stroke="var(--line)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
-        {[5, 10, 20].map((km) => (
-          <g key={km}>
-            <circle cx={sx(HOME.lon)} cy={sy(HOME.lat)} r={kmPx(km)} fill="none" stroke="var(--accent)" strokeOpacity="0.35" strokeDasharray="4 6" vectorEffect="non-scaling-stroke" />
-            <text x={sx(HOME.lon) + kmPx(km) * 0.71 + 4 * k} y={sy(HOME.lat) - kmPx(km) * 0.71 - 4 * k} fontSize={12 * k} fill="var(--accent)">{km} km</text>
-          </g>
-        ))}
-        <text x={sx(YSSY.lon)} y={sy(YSSY.lat) + 34 * k} textAnchor="middle" fontSize={13 * k} fontWeight="700" fill="var(--muted)">Sydney Airport</text>
-        <text x={sx(151.17)} y={sy(-34.01)} textAnchor="middle" fontSize={13 * k} fontStyle="italic" fill="var(--muted)">Botany Bay</text>
-        <text x={sx(151.45)} y={sy(-33.86)} textAnchor="middle" fontSize={13 * k} fontStyle="italic" fill="var(--muted)">Tasman Sea</text>
-        <circle cx={sx(HOME.lon)} cy={sy(HOME.lat)} r={7 * k} fill="var(--accent)" stroke="var(--card)" strokeWidth={3 * k} />
-        <text x={sx(HOME.lon) + 12 * k} y={sy(HOME.lat) + 4 * k} fontSize={14 * k} fontWeight="800" fill="var(--ink)">Maroubra</text>
-        {f.aircraft.filter((a) => !a.onGround).map((a) => {
-          const on = a.hex === sel;
-          const color = on ? "var(--alert)" : a.interesting ? "var(--sun)" : "var(--ink)";
-          const x = sx(a.lon), y = sy(a.lat);
-          return (
-            <g key={a.hex} onClick={() => pick(a.hex)} style={{ cursor: "pointer" }}>
-              {a.trail.length > 1 && <path d={a.trail.map(([la, lo], i) => `${i ? "L" : "M"}${sx(lo)},${sy(la)}`).join(" ")} fill="none" stroke={color} strokeOpacity="0.4" strokeWidth="2" vectorEffect="non-scaling-stroke" />}
-              <circle cx={x} cy={y} r={20 * k} fill="transparent" />
-              <g transform={`translate(${x},${y}) scale(${k}) rotate(${a.track ?? 0}) translate(-13,-13)`}>
-                <path d={PLANE} transform="scale(1.08)" fill={color} stroke="var(--card)" strokeWidth="1" />
-              </g>
-              <text x={x + 16 * k} y={y + 4 * k} fontSize={13 * k} fontWeight="700" fill={color}>{a.callsign ?? a.reg ?? a.hex}</text>
-            </g>
-          );
-        })}
-        <text x={left + v.w - 10 * k} y={top + vh - 10 * k} textAnchor="end" fontSize={11 * k} fill="var(--muted)">Coast: GSHHG. Positions: adsb.lol</text>
-      </svg>
-      <div className="map-ctl">
-        <button type="button" onClick={() => zoomAt(1.6)} aria-label="Zoom in" disabled={v.w <= MIN_W + 0.5}>+</button>
-        <button type="button" onClick={() => zoomAt(1 / 1.6)} aria-label="Zoom out" disabled={v.w >= MAX_W - 0.5}>−</button>
+    <figure className="ac-photo">
+      <div className="ac-photo-frame" style={{ aspectRatio: p ? `${p.width} / ${p.height}` : "3 / 2" }}>
+        {p && <img src={p.src} alt={similar ? `A ${typeName ?? "similar aircraft"}, not this one` : `${a.reg ?? label(a)}, ${typeName ?? "aircraft"}`} referrerPolicy="no-referrer" loading="lazy" />}
+        {similar && <span className="ac-photo-tag">Similar aircraft</span>}
       </div>
-      {changed && (
-        <button type="button" className="map-reset" onClick={() => setView(null)}>
-          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" strokeWidth="2" /><circle cx="12" cy="12" r="2.5" fill="currentColor" /><path d="M12 1v4M12 19v4M1 12h4M19 12h4" stroke="currentColor" strokeWidth="2" /></svg>
-          Back to Maroubra
-        </button>
+      {p && (similar
+        ? <figcaption>A {typeName}, not this aircraft. Photo <a href={p.link} target="_blank" rel="noopener noreferrer">{p.site}</a></figcaption>
+        : <figcaption>Photo <a href={p.link} target="_blank" rel="noopener noreferrer">{p.photographer === p.site ? p.site : `${p.photographer} / ${p.site ?? "Planespotters"}`}</a></figcaption>)}
+    </figure>
+  );
+}
+
+function Selected({ a, tookOffAt, follow, setFollow, openSky }: { a: Aircraft; tookOffAt: number | null; follow: boolean; setFollow: (v: boolean) => void; openSky: () => void }) {
+  const off = tookOffAt ?? a.tookOffAt ?? null;
+  const trend = a.vrate == null || a.onGround ? "" : a.vrate > 300 ? `, climbing ${nf(Math.round(a.vrate / 50) * 50)} ft/min` : a.vrate < -300 ? `, descending ${nf(Math.round(-a.vrate / 50) * 50)} ft/min` : ", level";
+  const hoursLeft = a.progress && a.speedKt && a.speedKt >= 100 ? a.progress.leftKm / (a.speedKt * 1.852) : null;
+  const sub = [a.airline?.name ?? a.operator, a.flightNo && a.callsign ? `callsign ${a.callsign}` : null].filter(Boolean).join(", ");
+  return (
+    <div className="card ac-card">
+      <div className="ac-head">
+        <AirlineBadge a={a} />
+        <div style={{ minWidth: 0 }}>
+          <h2 className="ac-title">{label(a)}</h2>
+          {sub && <div className="muted">{sub}</div>}
+        </div>
+        {a.emergency ? <span className="pill miss">{a.emergency}</span> : a.rare ? <span className="pill good">{a.rare}</span> : null}
+      </div>
+      <Photo a={a} />
+      {a.route && (
+        <div className="leg">
+          <div className="leg-ends">
+            <div><div className="leg-k">From</div><div className="big">{a.route.from?.iata ?? "?"}</div><div className="muted">{a.route.from?.location}</div>{off && <div className="leg-time">Took off {hm(off)}</div>}</div>
+            <div style={{ textAlign: "right" }}><div className="leg-k">To</div><div className="big">{a.route.to?.iata ?? "?"}</div><div className="muted">{a.route.to?.location}</div></div>
+          </div>
+          {a.progress && (
+            <>
+              <div className="leg-bar" role="img" aria-label={`${Math.round(a.progress.pct)}% of the way from ${a.route.from?.iata} to ${a.route.to?.iata}`}>
+                <span className="leg-done" style={{ width: `${a.progress.pct}%` }} />
+                <span className="leg-plane" style={{ left: `${a.progress.pct}%` }} />
+              </div>
+              <p className="muted leg-note">
+                {nf(a.progress.flownKm)} km flown, {nf(a.progress.leftKm)} km to go
+                {hoursLeft != null ? `, about ${hoursLeft >= 1 ? `${Math.floor(hoursLeft)} h ${String(Math.round((hoursLeft % 1) * 60)).padStart(2, "0")}` : `${Math.max(1, Math.round(hoursLeft * 60))} min`} at current speed` : ""}.
+              </p>
+            </>
+          )}
+          {a.route.codes.split("-").length > 2 && <p className="muted leg-note">Full route {a.route.codes.replaceAll("-", " to ")}.</p>}
+        </div>
       )}
+      {!a.route && <p className="muted leg-note">Route not known for this flight{off ? `. Took off at ${hm(off)}` : ""}.</p>}
+      <dl className="kv">
+        <dt>Aircraft</dt><dd>{a.desc ? titleCase(a.desc) : a.type ?? "n/a"}</dd>
+        {a.reg && <><dt>Registration</dt><dd>{a.reg}{a.built ? `, built ${a.built}` : ""}</dd></>}
+        {a.operator && a.airline && !a.operator.toLowerCase().includes(a.airline.name.toLowerCase().split(" ")[0]) && <><dt>Operator</dt><dd>{titleCase(a.operator)}</dd></>}
+        <dt>Altitude</dt><dd>{ftM(a)}{trend}</dd>
+        <dt>Speed</dt><dd>{a.speedKt != null ? `${nf(Math.round(a.speedKt * 1.852))} km/h (${Math.round(a.speedKt)} kt)` : "n/a"}</dd>
+        {a.track != null && <><dt>Heading</dt><dd>{compass(a.track)} ({Math.round(a.track)}°)</dd></>}
+        <dt>Squawk</dt><dd className={a.emergency ? "alert-text" : undefined}>{a.squawk ?? "n/a"}{a.emergency ? `, ${a.emergency.toLowerCase()}` : ""}</dd>
+        <dt>From Maroubra</dt><dd>{a.distKm} km {compass(a.bearing)}</dd>
+        {a.overhead && <><dt>Overhead</dt><dd>in {a.overhead.inMin} min</dd></>}
+        {a.source && <><dt>Position</dt><dd>{a.source}</dd></>}
+      </dl>
+      <div className="ac-actions">
+        <button className={`btn ${follow ? "" : "ghost"}`} aria-pressed={follow} onClick={() => setFollow(!follow)}>{follow ? "Following" : "Follow on map"}</button>
+        {!a.onGround && <button className="btn ghost" onClick={openSky}>Find in the sky</button>}
+      </div>
     </div>
   );
 }
 
-export function Overhead({ e }: { e: E<Flights> }) {
+export function Overhead({ e, night, demo }: { e: E<Flights>; night: boolean; demo: boolean }) {
   const f = e?.data;
   const [sel, setSel] = useState<string | null>(null);
+  const [follow, setFollow] = useState(false);
+  const [sky, setSky] = useState(false);
+  const [homeTick, setHomeTick] = useState(0);
+  const [chosen, setChosen] = useState<Base>(() => (store.get("mb.mapBase") as Base | null) ?? "map");
+  const setBase = (b: Base) => { setChosen(b); store.set("mb.mapBase", b); };
+  // Données de démonstration : hors ligne, donc sans tuiles.
+  // « Plain » est notre trait de côte local, limité au secteur de Sydney : réservé à la démonstration hors ligne.
+  const base: Base = demo ? "plain" : chosen === "plain" ? "map" : chosen;
+  const calm = useMemo(() => matchMedia("(prefers-reduced-motion: reduce)").matches, []);
+
+  // Zone visible, arrondie (0,05° et 5 km) pour ne pas relancer de requête à chaque petit déplacement.
+  const [view, setView] = useState<View | null>(null);
+  const viewKey = useRef("");
+  const onView = (v: View) => {
+    const r = { lat: Math.round(v.lat * 20) / 20, lon: Math.round(v.lon * 20) / 20, radiusKm: Math.ceil(v.radiusKm / 5) * 5 };
+    const k = `${r.lat}|${r.lon}|${r.radiusKm}`;
+    if (k !== viewKey.current) { viewKey.current = k; setView(r); }
+  };
+  const area = useAreaAircraft(view, !demo);
+
+  const motion = useMemo(() => new Motion(), []);
+  const home = f?.aircraft ?? NONE;
+  const aircraft = useMemo(() => {
+    if (!area.length) return home;
+    const mine = new Set(home.map((a) => a.hex));
+    return [...home, ...area.filter((a) => !mine.has(a.hex))];
+  }, [home, area]);
+  useEffect(() => { motion.update(aircraft, Date.now()); }, [aircraft, motion]);
+
+  const airborne = home.filter((a) => !a.onGround);
+  const emergencies = home.filter((a) => a.emergency);
+  // L'avion choisi reste choisi même s'il sort de la zone chargée (on garde sa dernière fiche connue).
+  const lastSel = useRef<Aircraft | null>(null);
+  const found = sel ? aircraft.find((a) => a.hex === sel) : undefined;
+  if (found) lastSel.current = found;
+  const s = found ?? (sel && lastSel.current?.hex === sel ? lastSel.current : undefined) ?? emergencies[0] ?? airborne.find((a) => a.overhead) ?? airborne[0];
+  const trace = useTrace(s?.hex ?? null, true);
+
   if (!f) return <section className="card"><CardHead title="Overhead"><Fresh e={e} /></CardHead><Empty>Waiting for aircraft positions.</Empty></section>;
-  const airborne = f.aircraft.filter((a) => !a.onGround);
-  const s = airborne.find((a) => a.hex === sel) ?? airborne.find((a) => a.overhead) ?? airborne[0];
+  const pick = (hex: string) => { setSel(hex); if (hex !== s?.hex) setFollow(false); };
+  const openSky = () => { void requestMotion(); setSky(true); };
+
   return (
     <section aria-labelledby="ov-title" style={{ display: "grid", gap: 16 }}>
       <div className="card">
@@ -182,42 +243,46 @@ export function Overhead({ e }: { e: E<Flights> }) {
           {f.curfew ? " Airport curfew until 06:00: only exempt flights." : ""} {f.seenToday} flights over the suburb today.
         </p>
       </div>
-      <div className="card map-card"><PlaneMap f={f} sel={s?.hex ?? null} pick={setSel} /></div>
-      <div className="grid">
-        {s && (
-          <div className="card">
-            <h2>{s.callsign ?? s.reg ?? s.hex}{s.rare ? ` · ${s.rare}` : ""}</h2>
-            {s.route && (
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", margin: "4px 0 12px" }}>
-                <div><div className="big">{s.route.from?.iata ?? "?"}</div><div className="muted">{s.route.from?.location}</div></div>
-                <div className="muted">to</div>
-                <div style={{ textAlign: "right" }}><div className="big">{s.route.to?.iata ?? "?"}</div><div className="muted">{s.route.to?.location}</div></div>
-              </div>
-            )}
-            <dl className="kv">
-              <dt>Aircraft</dt><dd>{s.type ?? "n/a"}{s.reg ? `, ${s.reg}` : ""}</dd>
-              <dt>Altitude</dt><dd>{ft(s)}{s.vrate ? (s.vrate > 300 ? ", climbing" : s.vrate < -300 ? ", descending" : "") : ""}</dd>
-              <dt>Speed</dt><dd>{s.speedKt != null ? `${Math.round(s.speedKt * 1.852)} km/h` : "n/a"}</dd>
-              <dt>From Maroubra</dt><dd>{s.distKm} km {compass(s.bearing)}</dd>
-              {s.overhead && <><dt>Overhead</dt><dd>in {s.overhead.inMin} min</dd></>}
-            </dl>
+      {emergencies.map((a) => (
+        <div key={a.hex} className="card emergency" role="alert">
+          <strong>{label(a)}{a.squawk ? ` squawking ${a.squawk}` : ""}: {a.emergency}.</strong>{" "}
+          {a.airline?.name ?? a.type ?? "Aircraft"}{a.route ? ` ${a.route.codes}` : ""}, {a.distKm} km {compass(a.bearing)}, {ft(a)}.{" "}
+          <button className="link-btn" onClick={() => { pick(a.hex); setFollow(true); }}>Show on map</button>
+        </div>
+      ))}
+      <div className="ov-main">
+      <div className="card chart-scroll map-panel">
+        <div className="map-tools">
+          <div className="seg" role="group" aria-label="Map background">
+            {((demo ? ["map", "satellite", "plain"] : ["map", "satellite"]) as Base[]).map((b) => (
+              <button key={b} aria-pressed={base === b} onClick={() => setBase(b)} disabled={demo && b !== "plain"}>{b === "map" ? "Map" : b === "satellite" ? "Satellite" : "Plain"}</button>
+            ))}
           </div>
-        )}
-        <div className="card">
-          <h2>Nearest first</h2>
+          <div className="map-tools-right">
+            <button className="btn ghost small" onClick={() => { setFollow(false); setHomeTick((n) => n + 1); }}>Home</button>
+            <button className="btn small" onClick={openSky}>Sky finder</button>
+          </div>
+        </div>
+        <FlightMap aircraft={aircraft} motion={motion} selected={s?.hex ?? null} follow={follow} base={base} night={night} calm={calm}
+          onPick={pick} onStopFollow={() => setFollow(false)} homeTick={homeTick} source={f.source ?? "adsb.lol"} onView={onView} selectedTrace={trace?.points ?? null} />
+      </div>
+        {s && <Selected a={s} tookOffAt={trace?.tookOffAt ?? null} follow={follow} setFollow={setFollow} openSky={() => { setSel(s.hex); openSky(); }} />}
+      </div>
+      <div className="card nearby">
+          <h2>Around Maroubra, nearest first</h2>
           <ul className="list planes">
-            {airborne.slice(0, 8).map((a) => (
+            {airborne.slice(0, 10).map((a) => (
               <li key={a.hex}>
-                <button className="row-btn" onClick={() => setSel(a.hex)} aria-pressed={a.hex === s?.hex}>
-                  <strong>{a.callsign ?? a.hex}</strong>
-                  <span className="muted">{a.route?.codes ?? a.type ?? ""}</span>
+                <button className={`row-btn${a.emergency ? " is-alert" : ""}`} onClick={() => pick(a.hex)} aria-pressed={a.hex === s?.hex}>
+                  <strong>{label(a)}</strong>
+                  <span className="muted">{a.emergency ?? a.route?.codes ?? a.type ?? ""}</span>
                   <span>{ft(a)}</span>
                 </button>
               </li>
             ))}
           </ul>
-        </div>
       </div>
+      {sky && <SkyFinder aircraft={f.aircraft} motion={motion} focus={s?.hex ?? null} onFocus={setSel} onClose={() => setSky(false)} />}
     </section>
   );
 }

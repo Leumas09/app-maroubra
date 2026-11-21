@@ -27,6 +27,8 @@
   --sky-top: oklch(84% 0.045 205);
   --sky-bottom: oklch(95% 0.02 195);
   --slot: oklch(86% 0.012 82);
+  --sand: oklch(91% 0.045 85);
+  --sea-ink: oklch(55% 0.09 225);
   --slot-shade: oklch(20% 0.01 80 / 0.35);
   --edge-light: inset 0 1px 0 oklch(100% 0 0 / 0.5);
   --shadow-panel: 0 1px 0 oklch(20% 0.01 80 / 0.2), 0 24px 48px -16px oklch(20% 0.02 80 / 0.3);
@@ -62,6 +64,8 @@
   --sky-top: oklch(9% 0.02 258);
   --sky-bottom: oklch(20% 0.035 245);
   --slot: oklch(9% 0.015 258);
+  --sand: oklch(30% 0.03 80);
+  --sea-ink: oklch(70% 0.09 225);
   --slot-shade: oklch(0% 0 0 / 0.7);
   --edge-light: inset 0 1px 0 oklch(100% 0 0 / 0.06);
   --shadow-panel: 0 1px 0 oklch(0% 0 0 / 0.4), 0 24px 48px -16px oklch(0% 0 0 / 0.6);
@@ -198,8 +202,256 @@ th { color: var(--muted); font-weight: 500; }
 .btn:hover { filter: brightness(1.06); }
 .btn:active { transform: translateY(1px); }
 .btn.ghost { background: linear-gradient(var(--paper-2), var(--paper-3)); color: var(--ink); border-color: var(--rule); }
+/* Overhead : carte des avions, fiche de l'avion choisi, viseur du ciel */
+.map-panel { overflow: hidden; display: grid; gap: 10px; }
+/* Carte et fiche de l'avion côte à côte sur grand écran, l'une sous l'autre sinon */
+.ov-main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); gap: 20px; align-items: start; }
+.ov-main .ac-card { padding: 0 4px 12px 0; border-top: 0; max-height: calc(66vh + 70px); overflow-y: auto; }
+.nearby .list.planes { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); column-gap: 24px; }
+.leg-k { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.leg-time { font-size: 14px; font-weight: 500; margin-top: 2px; }
+.ac-photo-frame { position: relative; }
+.ac-photo-tag { position: absolute; left: 8px; top: 8px; padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; background: oklch(15% 0.01 80 / 0.72); color: oklch(98% 0 0); }
+@media (max-width: 1099px) { .ov-main { grid-template-columns: minmax(0, 1fr); } .ov-main .ac-card { max-height: none; overflow: visible; padding-top: 18px; border-top: 1px solid var(--rule); } }
+.map-tools { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.map-tools-right { display: flex; gap: 8px; }
+.btn.small { min-height: 40px; padding: 0 16px; font-size: 15px; }
+.seg { display: inline-flex; padding: 3px; border-radius: 999px; background: var(--slot); box-shadow: inset 0 1px 2px var(--slot-shade); }
+.seg button { border: 0; background: none; border-radius: 999px; padding: 0 14px; min-height: 36px; font-size: 14px; font-weight: 500; color: var(--ink-2); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--paper); color: var(--ink); box-shadow: var(--edge-light), 0 1px 2px var(--slot-shade); }
+.seg button:disabled { opacity: 0.45; cursor: not-allowed; }
+.flight-map { position: relative; height: min(66vh, 620px); min-height: 360px; border-radius: 12px; overflow: hidden; background: var(--sea); isolation: isolate; }
+.flight-map[data-base="map"][data-night="1"] .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.8) contrast(0.85) saturate(0.5); }
+.flight-canvas { position: absolute; inset: 0; z-index: 450; pointer-events: none; }
+.flight-map.leaflet-container { font: inherit; background: var(--sea); }
+.flight-map .leaflet-control-attribution { background: color-mix(in oklch, var(--paper) 82%, transparent); color: var(--muted); font-size: 11px; }
+.flight-map .leaflet-control-attribution a { color: var(--ink-2); }
+.flight-map .leaflet-bar { border: 1px solid var(--rule); box-shadow: 0 1px 2px var(--slot-shade); border-radius: 10px; overflow: hidden; }
+.flight-map .leaflet-bar a { background: var(--paper); color: var(--ink); border-bottom-color: var(--rule); width: 36px; height: 36px; line-height: 36px; }
+.flight-map .leaflet-bar a:hover { background: var(--paper-2); }
+.map-tip { background: none; border: 0; box-shadow: none; padding: 0 4px; font-weight: 700; font-size: 13px; color: var(--muted); text-shadow: 0 0 3px var(--paper), 0 0 3px var(--paper); }
+.map-tip.home { color: var(--ink); font-weight: 800; font-size: 14px; }
+.map-tip::before { display: none; }
+.flight-map[data-base="satellite"] .map-tip { color: #fff; text-shadow: 0 0 3px #000, 0 0 3px #000; }
+.card.emergency { border-top: 2px solid var(--alert); padding: 14px 0; color: var(--miss-ink); line-height: 1.5; }
+.link-btn { all: unset; cursor: pointer; color: var(--accent); text-decoration: underline; font-weight: 500; }
+.link-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.alert-text { color: var(--miss-ink); }
+.row-btn.is-alert strong, .row-btn.is-alert .muted { color: var(--miss-ink); }
+.ac-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.ac-head .pill { margin-left: auto; flex: none; }
+.ac-title { margin: 0 !important; font-family: var(--display); font-size: 30px !important; font-weight: 500 !important; color: var(--ink) !important; letter-spacing: -0.02em; line-height: 1.1; }
+.airline-badge { flex: none; display: grid; place-items: center; width: 48px; height: 48px; border-radius: 12px; font-weight: 800; font-size: 17px; letter-spacing: 0.02em; box-shadow: var(--edge-light), 0 1px 2px var(--slot-shade); }
+.ac-photo { margin: 0 0 14px; }
+.ac-photo-frame { width: 100%; border-radius: 12px; overflow: hidden; background: var(--paper-3); }
+.ac-photo-frame img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.ac-photo figcaption { font-size: 12px; color: var(--muted); margin-top: 6px; }
+.ac-photo figcaption a { color: var(--muted); }
+.leg { margin: 4px 0 14px; }
+.leg-ends { display: flex; justify-content: space-between; align-items: end; gap: 12px; }
+.leg-bar { position: relative; height: 6px; margin: 14px 8px 10px; border-radius: 999px; background: var(--slot); box-shadow: inset 0 1px 2px var(--slot-shade); }
+.leg-done { position: absolute; inset: 0 auto 0 0; border-radius: 999px; background: var(--accent); }
+.leg-plane { position: absolute; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; background: var(--paper); border: 3px solid var(--accent); box-sizing: border-box; }
+.leg-note { font-size: 14px; margin: 0 0 4px; }
+.ac-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+.skyfinder { position: fixed; inset: 0; z-index: 2000; background: linear-gradient(var(--sky-top), var(--sky-bottom)); color: #fff; touch-action: none; }
+:root[data-theme="day"] .skyfinder { background: linear-gradient(oklch(52% 0.09 235), oklch(72% 0.06 220)); }
+.skyfinder-video, .skyfinder-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.skyfinder-video { object-fit: cover; }
+.skyfinder-canvas { cursor: grab; }
+.skyfinder-top, .skyfinder-bottom { position: absolute; left: 0; right: 0; padding: 14px 16px; background: oklch(0% 0 0 / 0.45); backdrop-filter: blur(6px); }
+.skyfinder-top { top: 0; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding-top: max(14px, env(safe-area-inset-top)); }
+.skyfinder-top strong { display: block; font-size: 17px; }
+.skyfinder-dir { font-size: 13px; opacity: 0.85; }
+.skyfinder-bottom { bottom: 0; padding-bottom: max(14px, env(safe-area-inset-bottom)); }
+.skyfinder-focus { margin: 0 0 6px; font-size: 16px; line-height: 1.4; }
+.skyfinder-hint { margin: 0; font-size: 13px; opacity: 0.85; line-height: 1.4; }
+.skyfinder .btn.ghost { min-height: 40px; }
+
+/* Météo : l'instant, avertissements, heure par heure, dix jours, tuiles */
+.wx { display: grid; gap: 18px; }
+.wx-now { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 20px; }
+.wx-place { font-size: 15px; color: var(--muted); display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+.wx-cond { display: flex; align-items: center; gap: 10px; font-family: var(--display); font-size: 26px; letter-spacing: -0.02em; margin-top: 6px; }
+.wx-temp { font-family: var(--display); font-size: 104px; line-height: 0.9; letter-spacing: -0.05em; }
+.wx-sub { font-size: 18px; text-align: right; display: grid; gap: 4px; }
+.wx-warning { display: flex; gap: 14px; align-items: flex-start; padding: 16px 18px; border-radius: var(--radius); background: var(--warn-bg); color: var(--miss-ink); }
+.wx-warning strong { font-family: var(--display); font-size: 20px; font-weight: 500; }
+.wx-warning p { margin: 4px 0 0; color: var(--ink-2); font-size: 14px; }
+.wx-warning svg { flex: none; margin-top: 2px; }
+.wx-panel h2 { margin-bottom: 10px; }
+.wx-hours { list-style: none; margin: 0; padding: 4px 0 8px; display: flex; gap: 4px; overflow-x: auto; scrollbar-width: thin; }
+.wx-hours li { flex: none; width: 62px; display: grid; justify-items: center; gap: 6px; padding: 8px 0; border-radius: 12px; }
+.wx-hours li:first-child { background: var(--paper-3); }
+.wx-h-temp { font-weight: 600; font-size: 17px; }
+.wx-h-pop { font-size: 13px; color: var(--accent); min-height: 16px; }
+.wx-h-time { font-size: 13px; color: var(--muted); }
+.wx-days { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 8px; scrollbar-width: thin; }
+.wx-day { flex: none; width: 84px; display: grid; justify-items: center; gap: 4px; padding: 12px 6px; border-radius: 999px; border: 1px solid var(--rule); background: linear-gradient(var(--paper-2), var(--paper-3)); color: var(--ink); cursor: pointer; font: inherit; }
+.wx-day[aria-selected="true"] { border: 2px solid var(--ink); background: var(--paper); }
+.wx-d-max { font-weight: 700; font-size: 17px; }
+.wx-d-min { color: var(--muted); font-size: 15px; }
+.wx-d-pop { font-size: 13px; color: var(--accent); min-height: 16px; }
+.wx-d-name { font-weight: 500; }
+.wx-d-date { font-size: 13px; color: var(--muted); }
+.wx-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+.wx-tile { padding: 16px 18px; border-radius: var(--radius); background: linear-gradient(var(--paper-2), var(--paper-3)); box-shadow: var(--edge-light), var(--shadow-panel); display: flex; flex-direction: column; align-items: center; text-align: center; min-width: 0; }
+.wx-tile h3 { margin: 0 0 6px; font-size: 15px; font-weight: 500; color: var(--muted); align-self: flex-start; }
+.wx-big { margin: 10px 0 4px; font-family: var(--display); font-size: 52px; line-height: 1; letter-spacing: -0.04em; }
+.wx-big small { font-size: 20px; letter-spacing: 0; color: var(--ink-2); }
+.wx-label { margin: 6px 0 0; font-size: 15px; }
+.wx-tile-note { margin: auto 0 0; padding-top: 10px; font-size: 12px; color: var(--muted); }
+.wx-dial { width: 120px; height: auto; }
+.wx-sun { width: 100%; max-width: 220px; height: auto; margin-top: 8px; }
+.wx-seg { position: relative; display: grid; grid-auto-flow: column; gap: 3px; width: 100%; max-width: 200px; height: 8px; margin-top: 10px; }
+.wx-seg span { border-radius: 4px; }
+.wx-seg i { position: absolute; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; background: var(--paper); border: 3px solid var(--ink); }
+.wx-dew { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: var(--good-bg); color: var(--good); font-weight: 600; margin-right: 6px; }
+@media (max-width: 699px) {
+  .wx-now { grid-template-columns: minmax(0, 1fr) auto; }
+  .wx-sub { grid-column: 1 / -1; text-align: left; }
+  .wx-temp { font-size: 80px; }
+  .wx-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .wx-tile { padding: 12px; }
+  .wx-big { font-size: 38px; }
+}
+
+/* Accueil : bus 396 du matin */
+.bus-line { display: grid; gap: 8px; padding: 12px 16px; border-radius: 14px; background: linear-gradient(var(--paper-2), var(--paper-3)); box-shadow: var(--edge-light), 0 1px 0 var(--slot-shade); }
+.bus-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 15px; }
+.bus-route { display: grid; place-items: center; min-width: 44px; height: 30px; padding: 0 8px; border-radius: 8px; background: oklch(55% 0.13 235); color: #fff; font-weight: 800; }
+.bus-next { margin-left: auto; font-weight: 600; color: var(--accent); }
+.bus-groups { display: flex; flex-wrap: wrap; gap: 8px 24px; }
+.bus-group { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.bus-win { font-size: 12px; color: var(--muted); margin-right: 4px; }
+.bus-time { font-family: var(--display); font-size: 19px; padding: 2px 9px; border-radius: 8px; background: var(--paper); box-shadow: inset 0 0 0 1px var(--rule); }
+.bus-time.gone { opacity: 0.4; text-decoration: line-through; }
+.bus-time.next { background: var(--accent); color: var(--accent-ink); box-shadow: none; }
+.bus-none { margin: 0; font-size: 14px; }
+
+/* Ciel : le meilleur à voir ce soir, carte du ciel */
+.sky-events { list-style: none; margin: 0; padding: 0; display: grid; }
+.sky-events li { display: grid; grid-template-columns: 70px minmax(0, 1fr) 96px; gap: 14px; align-items: center; padding: 12px 8px; border-top: 1px solid var(--rule); border-radius: 10px; }
+.sky-events li.top { background: var(--paper-3); }
+.sky-ev-when { font-family: var(--display); font-size: 20px; display: grid; }
+.sky-ev-when small { font-family: var(--body); font-size: 12px; color: var(--muted); }
+.sky-ev-what { display: grid; gap: 2px; min-width: 0; }
+.sky-ev-kind { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+.sky-ev-detail { font-size: 14px; color: var(--ink-2); line-height: 1.4; }
+.sky-ev-score { display: grid; justify-items: center; font-family: var(--display); font-size: 24px; padding: 6px 4px; border-radius: 12px; background: var(--paper-3); }
+.sky-ev-score small { font-family: var(--body); font-size: 11px; color: var(--muted); }
+.sky-ev-score.good { background: var(--good-bg); color: var(--good); }
+.sky-ev-score.maybe { background: oklch(92% 0.06 90); color: oklch(42% 0.09 80); }
+.sky-ev-score.poor { background: var(--warn-bg); color: var(--miss-ink); }
+:root[data-theme="night"] .sky-ev-score.maybe { background: oklch(28% 0.05 80); color: oklch(85% 0.1 85); }
+.sky-chart-card .card-head { align-items: center; }
+.sky-time { display: flex; align-items: center; gap: 10px; flex: 1 1 260px; justify-content: flex-end; }
+.sky-time input { flex: 1; max-width: 320px; accent-color: var(--accent); }
+.skychart svg { display: block; width: 100%; max-width: 680px; height: auto; margin: 0 auto; cursor: crosshair; }
+.skychart-info { text-align: center; margin: 8px 0 0; min-height: 1.5em; }
+.skychart-wait { min-height: 360px; display: grid; place-items: center; color: var(--muted); }
+@media (max-width: 639px) { .sky-events li { grid-template-columns: 54px minmax(0, 1fr) 74px; gap: 8px; } .sky-ev-when { font-size: 17px; } .sky-ev-score { font-size: 19px; } }
+
 /* Écran ambiant la nuit : luminosité réduite pour ne pas éclairer la pièce */
 :root[data-ambient="dim"] body { filter: brightness(0.62); }
+
+/* Plage : statut officiel, cadran, ruban horaire, instruments, webcams */
+.beach { display: grid; gap: 22px; }
+.status-band { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 18px; padding: 20px 22px; border-radius: var(--radius); background: linear-gradient(var(--paper-2), var(--paper-3)); box-shadow: var(--edge-light), var(--shadow-panel); border-left: 6px solid var(--muted); }
+.status-band.open { border-left-color: var(--good); }
+.status-band.closed { border-left-color: var(--alert); background: linear-gradient(var(--warn-bg), var(--paper-3)); }
+.status-kicker { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; font-size: 14px; color: var(--muted); font-weight: 500; }
+.status-word { margin: 4px 0 0; font-family: var(--display); font-size: clamp(30px, 3.4vw, 44px); line-height: 1.05; letter-spacing: -0.03em; }
+.status-band.open .status-word { color: var(--good); }
+.status-band.closed .status-word { color: var(--miss-ink); }
+.status-sub { margin: 8px 0 0; font-size: 16px; color: var(--ink-2); line-height: 1.45; }
+.status-quote { margin: 10px 0 0; font-size: 16px; line-height: 1.45; color: var(--ink); font-style: italic; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.chip { display: inline-flex; gap: 6px; align-items: baseline; padding: 5px 12px; border-radius: 999px; font-size: 14px; font-weight: 500; background: var(--paper); box-shadow: inset 0 0 0 1px var(--rule); }
+.chip-k { color: var(--muted); font-weight: 400; }
+.chip.bad { background: var(--warn-bg); color: var(--miss-ink); box-shadow: none; }
+.chip.ok { background: var(--good-bg); color: var(--good); box-shadow: none; }
+.beach-hero { display: grid; gap: 4px; }
+.hero-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.hero-top .lede { min-width: 0; }
+.swim-pill { flex: none; display: inline-flex; align-items: center; gap: 7px; padding: 5px 12px 5px 10px; border-radius: 999px; font-size: 14px; background: var(--paper); box-shadow: inset 0 0 0 1px var(--rule); white-space: nowrap; }
+.swim-pill i { width: 11px; height: 11px; border-radius: 50%; }
+.swim-pill-k, .swim-pill-label { color: var(--muted); }
+.swim-pill strong { font-weight: 700; }
+.sea-section { display: grid; gap: 16px; margin-top: 8px; }
+.sea-section > .card:first-child h2 { margin: 0 0 8px; }
+/* Accueil : statut officiel de la plage */
+.beach-line { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-radius: 14px; text-decoration: none; color: var(--ink); background: linear-gradient(var(--paper-2), var(--paper-3)); box-shadow: var(--edge-light), 0 1px 0 var(--slot-shade); border-left: 5px solid var(--muted); }
+.beach-line.open { border-left-color: var(--good); }
+.beach-line.closed { border-left-color: var(--alert); background: linear-gradient(var(--warn-bg), var(--paper-3)); }
+.beach-line svg { flex: none; }
+.beach-line-text { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; min-width: 0; }
+.beach-line-k { font-size: 13px; color: var(--muted); font-weight: 500; }
+.beach-line strong { font-family: var(--display); font-size: 20px; font-weight: 500; letter-spacing: -0.02em; }
+.beach-line.closed strong { color: var(--miss-ink); }
+.beach-line.open strong { color: var(--good); }
+.beach-line-sub { font-size: 15px; color: var(--ink-2); }
+.beach-line:hover strong { text-decoration: underline; }
+.best { margin-top: 14px; }
+.best-when { margin: 0; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-family: var(--display); font-size: 24px; letter-spacing: -0.02em; }
+.best-k { font-family: var(--body); font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
+.best-score { font-family: var(--body); font-size: 15px; font-weight: 700; color: var(--paper); padding: 3px 10px; border-radius: 999px; }
+.because { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 2px; }
+.because li { position: relative; padding: 6px 0 6px 26px; line-height: 1.4; font-size: 16px; }
+.because li::before { position: absolute; left: 0; top: 6px; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 700; }
+.because li.plus::before { content: "✓"; background: var(--good-bg); color: var(--good); }
+.because li.minus::before { content: "−"; background: var(--warn-bg); color: var(--miss-ink); }
+.ribbon { min-width: 0; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12px; color: var(--muted); padding: 6px 4px 2px 92px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.instruments { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.instrument { padding: 16px 16px 14px; border-radius: var(--radius); background: linear-gradient(var(--paper-2), var(--paper-3)); box-shadow: var(--edge-light), var(--shadow-panel); display: flex; flex-direction: column; align-items: center; text-align: center; min-width: 0; }
+.instrument h2 { margin: 0 0 6px; font-size: 15px; font-weight: 500; color: var(--muted); align-self: flex-start; }
+.compass { width: 100%; max-width: 180px; height: auto; }
+.inst-value { margin: 6px 0 0; font-weight: 600; font-size: 16px; }
+.inst-big { margin: 10px 0 8px; font-family: var(--display); font-size: 56px; line-height: 1; letter-spacing: -0.045em; }
+.inst-sub { margin: 8px 0 0; font-size: 13px; color: var(--muted); line-height: 1.45; }
+.scale { width: 100%; max-width: 280px; height: auto; margin-top: 8px; }
+.factors ul { list-style: none; margin: 0; padding: 0; }
+.factors li { display: grid; grid-template-columns: 18px minmax(0, 1fr) 80px 34px; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--rule); }
+.f-sign { font-weight: 700; }
+.factors li.plus .f-sign { color: var(--good); }
+.factors li.minus .f-sign { color: var(--miss-ink); }
+.factors li.info .f-sign { color: var(--accent); }
+.f-text { line-height: 1.35; }
+.f-bar { height: 8px; border-radius: 4px; background: var(--slot); box-shadow: inset 0 1px 2px var(--slot-shade); overflow: hidden; }
+.f-bar.none { background: none; box-shadow: none; }
+.f-bar span { display: block; height: 100%; border-radius: 4px; background: var(--alert); }
+.f-pts { font-size: 13px; color: var(--miss-ink); text-align: right; font-weight: 600; }
+.f-sum { margin: 0; padding-top: 10px; border-top: 1px solid var(--rule); text-align: right; color: var(--muted); }
+.f-sum strong { color: var(--ink); font-size: 18px; }
+.cams { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.cam { display: block; color: var(--ink); text-decoration: none; }
+.cam-view { position: relative; aspect-ratio: 16 / 9; border-radius: 14px; overflow: hidden; background: var(--paper-3); box-shadow: var(--edge-light), var(--shadow-panel); }
+.cam-view img, .cam-view svg { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cam-live { position: absolute; left: 10px; bottom: 10px; display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 999px; font-size: 13px; font-weight: 600; background: oklch(15% 0.01 80 / 0.72); color: oklch(98% 0 0); }
+.cam-live .dot { width: 8px; height: 8px; border-radius: 50%; background: oklch(62% 0.22 28); }
+.cam:hover .cam-live { background: var(--accent); color: var(--accent-ink); }
+.cam-name { margin-top: 8px; font-weight: 600; }
+.cam-view video { width: 100%; height: 100%; object-fit: cover; display: block; background: #000; }
+button.cam-play { border: 0; cursor: pointer; font: inherit; font-size: 13px; font-weight: 600; }
+button.cam-play:hover, button.cam-play:focus-visible { background: var(--accent); color: var(--accent-ink); }
+.cam-off { display: grid; place-items: center; height: 100%; padding: 12px; text-align: center; color: var(--muted); font-size: 14px; }
+.cam-where { font-size: 13px; color: var(--muted); }
+@media (max-width: 1199px) { .instruments { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 699px) {
+  .hero-top { flex-direction: column; gap: 8px; }
+  .status-band { grid-template-columns: minmax(0, 1fr); padding: 16px; gap: 8px; }
+  .status-band > svg { display: none; }
+  .instruments { gap: 10px; }
+  .instrument { padding: 12px 10px; }
+  .inst-big { font-size: 38px; margin: 6px 0; }
+  .inst-value { font-size: 14px; }
+  .inst-sub { font-size: 12px; }
+  .factors li { grid-template-columns: 18px minmax(0, 1fr) 50px 30px; }
+  .legend { padding-left: 4px; }
+}
+@media (max-width: 479px) { .cams { grid-template-columns: minmax(0, 1fr); } }
 
 /* Tablette en portrait et téléphone : le rail devient un bandeau */
 @media (max-width: 899px) {
@@ -228,6 +480,8 @@ th { color: var(--muted); font-weight: 500; }
   .pill { white-space: nowrap; }
   .huge { font-size: 56px; }
   .lede { font-size: 22px; }
+  .flight-map { height: 62vh; min-height: 320px; }
+  .ac-title { font-size: 26px !important; }
 }
 @media (prefers-reduced-motion: no-preference) {
   .rail a { transition: color 0.2s, box-shadow 0.2s; }

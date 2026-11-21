@@ -1,8 +1,9 @@
 // Accueil (direction B « Instrument ») : l'heure, une phrase, le ciel tracé, les niveaux et les prochains moments.
 import { useState } from "react";
-import type { Beach, Buoy, Marine, SourceEntry, SpaceWeather, Sunrise, Weather } from "@maroubra/core";
-import { CenteredScroll } from "../components/CenteredScroll";
-import { focusOf, HorizonChart } from "../components/HorizonChart";
+import type { Beach, BeachStatus, Buoy, Marine, SourceEntry, SpaceWeather, Sunrise, Weather } from "@maroubra/core";
+import { BeachStatusLine } from "../components/beach-status";
+import { BusLine } from "../components/BusLine";
+import { HorizonChart } from "../components/HorizonChart";
 import { compass, longDate, pct, time } from "../lib/format";
 import type { SkyModel } from "../lib/sky-model";
 import { skyLede } from "./Sky";
@@ -88,6 +89,7 @@ interface Props {
   sky: SkyModel | null;
   brief: string | null;
   beach: E<Beach>;
+  beachStatus: E<BeachStatus>;
   weather: E<Weather>;
   buoy: E<Buoy>;
   marine: E<Marine>;
@@ -96,7 +98,7 @@ interface Props {
   moments: HomeMoment[];
 }
 
-export function Home({ now, sky, brief, beach, weather, buoy, marine, sunrise, space, moments }: Props) {
+export function Home({ now, sky, brief, beach, beachStatus, weather, buoy, marine, sunrise, space, moments }: Props) {
   const night = !!sky?.isNight;
   const b = beach?.data;
   const w = weather?.data;
@@ -107,7 +109,13 @@ export function Home({ now, sky, brief, beach, weather, buoy, marine, sunrise, s
   const sr = sunrise?.data;
   const sp = space?.data;
 
-  const beachLevel: Level = {
+  const closed = beachStatus?.data?.status === "closed";
+  const beachLevel: Level = closed ? {
+    label: "Beach",
+    value: "Closed",
+    sub: beachStatus?.data?.reason?.toLowerCase() ?? "lifeguards",
+    level: 0,
+  } : {
     label: "Beach",
     value: b ? (night && b.best ? b.best.score.toFixed(1) : b.score.toFixed(1)) : "n/a",
     sub: b?.best ? (night ? `best ${time(new Date(b.best.start * 1000))}` : `${b.best.score} at ${time(new Date(b.best.start * 1000))}`) : b?.label ?? "",
@@ -138,7 +146,7 @@ export function Home({ now, sky, brief, beach, weather, buoy, marine, sunrise, s
         { label: "Water", value: water != null ? `${water.toFixed(1)}°` : "n/a", sub: "sea surface", level: water != null ? (water - 12) / 14 : null },
       ];
 
-  const headline = night && sky ? skyLede(sky, w) : brief ?? (sky ? skyLede(sky, w) : "Reading the sky and the sea…");
+  const headline = night && sky ? skyLede(sky, w?.hourly) : brief ?? (sky ? skyLede(sky, w?.hourly) : "Reading the sky and the sea…");
   const sub = night ? brief : null;
 
   return (
@@ -156,11 +164,12 @@ export function Home({ now, sky, brief, beach, weather, buoy, marine, sunrise, s
 
       {sky && <SunriseVote now={now} sunAlt={sky.sunAltNow} />}
 
-      {sky ? (
-        <CenteredScroll className="band chart-scroll" focus={focusOf(sky.tracks.sun, sky.tracks.moon)}>
-          <HorizonChart sun={sky.tracks.sun} moon={sky.tracks.moon} planets={sky.tracks.planets} summary={skyLede(sky, w)} />
-        </CenteredScroll>
-      ) : <div className="band" style={{ minHeight: 213 }} aria-busy="true" />}
+      <BeachStatusLine e={beachStatus} now={now} />
+      <BusLine now={now} />
+
+      <div className="band chart-scroll">
+        {sky ? <HorizonChart sun={sky.tracks.sun} moon={sky.tracks.moon} planets={sky.tracks.planets} summary={skyLede(sky, w?.hourly)} /> : <div style={{ minHeight: 200 }} aria-busy="true" />}
+      </div>
 
       <div className="home-foot">
         <div className="panel levels" role="group" aria-label="Levels right now">

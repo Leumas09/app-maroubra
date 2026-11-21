@@ -2,6 +2,15 @@
 // et un seuil de péremption. Une source en panne n'arrête jamais les autres.
 import type { Store } from "./store";
 
+/**
+ * Un calcul dérivé dont une entrée n'est pas encore arrivée (juste après un démarrage) : ce n'est pas une panne.
+ * Pas d'erreur affichée, nouvel essai 15 s plus tard au lieu de la reprise progressive.
+ */
+export class Waiting extends Error {
+  constructor(what: string) { super(`waiting for ${what}`); }
+}
+const WAITING_RETRY_MS = 15_000;
+
 export interface Collector<T = unknown> {
   id: string;
   everyMs: number;
@@ -21,6 +30,10 @@ export function startCollectors(store: Store, collectors: Collector[], opts: { o
         store.success(col.id, data);
         failures = 0;
       } catch (err) {
+        if (err instanceof Waiting) {
+          timers.push(setTimeout(tick, Math.min(col.everyMs, WAITING_RETRY_MS)));
+          return;
+        }
         failures++;
         store.failure(col.id, err);
         console.error(JSON.stringify({ event: "collector_failed", source: col.id, error: String((err as Error)?.message ?? err) }));

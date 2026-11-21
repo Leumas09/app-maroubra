@@ -91,6 +91,12 @@ export function moments(i: MomentInputs, now = new Date()): Moment[] {
     }
   }
   for (const a of i.flights?.aircraft ?? []) {
+    if (a.emergency && a.distKm <= 60) {
+      const who = a.flightNo ?? a.callsign ?? a.reg ?? a.hex;
+      out.push({ key: `emergency-${a.hex}-${a.emergency}-${day(now)}`, at: now.toISOString(), kind: "plane", priority: 1,
+        title: `${who}: ${a.emergency.toLowerCase().replace(/^./, (c) => c.toUpperCase())}${a.squawk && ["7500", "7600", "7700"].includes(a.squawk) ? ` (squawk ${a.squawk})` : ""}`,
+        detail: `${a.airline?.name ?? a.type ?? "Aircraft"}${a.route ? `, ${a.route.codes}` : ""}, ${a.distKm} km ${compass(a.bearing)} of Maroubra at ${a.altFt ?? "?"} ft.` });
+    }
     if (a.interesting && a.overhead && a.overhead.inMin <= 5) {
       out.push({ key: `plane-${a.hex}-${day(now)}`, at: new Date(nowMs + a.overhead.inMin * 60e3).toISOString(), kind: "plane", priority: 2,
         title: `${a.rare ?? a.type ?? "Unusual aircraft"} overhead in ${a.overhead.inMin} min`, detail: `${a.callsign ?? a.reg ?? a.hex}${a.route ? `, ${a.route.codes}` : ""}, ${a.altFt ?? "?"} ft.` });

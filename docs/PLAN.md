@@ -486,11 +486,147 @@ Développé d'un seul tenant, sans phases imposées. Tout est testé localement 
 - `main` n'est pas protégée : aucune relecture ni aucun check n'est imposé avant fusion.
 - Dans le dépôt du socle, `docs/droits.md` décrit encore une condition à 6 rôles.
 
-## Partie I : nuit du 21 au 22 novembre 2026
+## Partie I : refonte de la page Beach (20 novembre 2026)
+
+Demande de Samuel : une page Beach plus belle, qui explique le meilleur créneau, avec les webcams et le statut officiel de la plage.
+
+### I.1 Ce qui change
+
+| Élément | Avant | Après |
+|---|---|---|
+| Statut officiel | Un lien vers Beachsafe | Bandeau en tête : ouverte ou fermée et raison, rapport du matin des sauveteurs de Randwick (baïnes, physalies, vagues, citation), horaires de surveillance et note de danger Beachsafe, prévision de pollution Beachwatch. Le lien Beach du rail passe en alerte si la plage est fermée |
+| Score | Un nombre | Cadran 0 à 10, repère du meilleur créneau, barres des points retirés par facteur (10 − pertes = score) |
+| Meilleur créneau | « Best window 17:00 to 19:00 » | La même chose, plus le pourquoi : facteur par facteur, contraste avec l'heure où ce facteur est le pire (« Offshore W wind 8 km/h; onshore ENE 28 km/h at 11:00 »), et ce qui reste à surveiller |
+| Graphique | Barres de score | Ruban horaire sur aujourd'hui et demain : courbe du score, flèches de vent colorées (de terre, parallèle, de mer), houle, marée calculée, UV, créneau en surbrillance |
+| Instruments | Tableau clé-valeur | Rose du vent et rose de la houle posées sur la plage (mer à l'est, terre à l'ouest), échelle de température de l'eau, échelle UV avec pic et heures de protection |
+| Webcams | Aucune | Cartes « Maroubra » et « Maroubra South » vers les caméras en direct de Randwick City Council, avec la photo du matin des sauveteurs quand elle existe |
+
+### I.2 Sources ajoutées (collecteur `beachStatus`, toutes les 15 min)
+
+| Source | Adresse | Statut |
+|---|---|---|
+| Rapports des sauveteurs, Randwick City Council | `https://www.randwick.nsw.gov.au/integration/feeds/lifeguard-reports` (RSS, un item par plage, publié vers 7 h) | Parseur testé sur une capture réelle du 09/11/2026 (projet public `lukewjudd/beach-bot`). Le site est derrière Cloudflare : à confirmer depuis Azure |
+| NSW Beachwatch | `https://api.beachwatch.nsw.gov.au/public/sites/geojson?site_name=Maroubra%20Beach` (CC BY 4.0) | Format documenté par l'API officielle |
+| Beachsafe (SLSA) | `https://beachsafe.org.au/api/v4/beach/maroubra` (non documentée) | Au mieux : horaires de surveillance et note de danger |
+
+Effets sur le score : une fermeture du jour par les sauveteurs met le score à 0 pour ce jour ; la prévision Beachwatch (« Likely » −4, « Possible » −1,5) remplace la règle « pluie de plus de 10 mm en 24 h » quand elle existe.
+
+La politique de sécurité du site autorise les images de `www.randwick.nsw.gov.au` (photo du matin), et seulement cet hôte.
+
+### I.3 Limites connues
+
+- Aucune de ces trois sources n'a pu être appelée depuis l'environnement de développement (réseau restreint) : la première vraie réponse se verra en production, dans « Official status ». Une source en panne affiche « Official status unavailable » sans toucher au reste.
+- Les sauveteurs publient le matin ; une fermeture en cours de journée (requin) peut ne pas apparaître.
+- Les flux vidéo des caméras ne sont pas intégrés dans la page : ni l'adresse du flux ni le droit de l'intégrer ne sont vérifiés. Les cartes ouvrent la page des caméras de la mairie.
+- Pas de flux public SharkSmart : les fermetures pour requin passent par le rapport des sauveteurs.
+
+## Partie J : Overhead au niveau d'un radar de vols (20 novembre 2026)
+
+Premier lot choisi par Samuel dans la liste des fonctionnalités de Flightradar24 (n° 1, 2, 3, 4, 9, 17, 18, 19, 21, 23, 48, 50).
+
+| Fonction | Réalisation | Juge |
+|---|---|---|
+| Carte zoomable (1) et fonds au choix (2) | Leaflet 1.9.4 ; fonds « Map » (CARTO Positron le jour, Dark Matter la nuit), « Satellite » (Esri World Imagery), « Plain » (trait de côte OSM local, sans réseau, imposé en démonstration) | Test Playwright : tuiles CARTO et Esri demandées aux bonnes URL et acceptées par la CSP |
+| Mouvement continu (3) | `apps/web/src/lib/motion.ts` : extrapolation à la vitesse sol depuis `posAt`, écart fondu en 1 s à chaque relevé, rien au-delà de 90 s | Tests unitaires ; test Playwright : le calque bouge avec une position fraîche, reste figé avec une position ancienne |
+| Silhouettes (4) | 9 formes vues de dessus (quadriréacteur, gros porteur, moyen-courrier, réacteurs arrière, turbopropulseur, léger, hélicoptère, planeur, chasseur), choisies par type OACI puis catégorie ADS-B, taille selon l'avion | Tests unitaires |
+| Suivi (9) | Bouton « Follow on map », arrêté dès qu'on déplace la carte | Test Playwright |
+| Photo (17) | `GET /api/aircraft/:hex/photo` : API Planespotters (adresse, puis immatriculation), 24 h en mémoire ; image servie par Planespotters avec nom du photographe et lien | Tests unitaires et de route ; seuls les hôtes Planespotters sont acceptés |
+| Compagnie (18) et n° de vol (19) | `apps/hub/src/sources/airlines.ts` : 59 compagnies vues à Sydney, pastille couleur (pas de logo, pour ne pas reprendre de marques déposées) ; numéro commercial seulement si la compagnie numérote ainsi (pas pour QantasLink) | Tests unitaires |
+| Avancement (21) | Étape en cours d'une route à escales (celle qui fait le moins de détour), distance parcourue et restante, durée « at current speed » : un calcul, pas une heure d'arrivée prévue | Tests unitaires |
+| Squawk (23) et urgences (48) | Champ `emergency` de readsb, à défaut 7500, 7600, 7700 ; bandeau, cercle rouge sur la carte, moment prioritaire et notification (type « plane ») à moins de 60 km | Tests unitaires |
+| Sky finder (50) | Caméra arrière, capteurs d'orientation (absolus sur Android, `webkitCompassHeading` sur iOS), projection perspective avec la courbure de la Terre ; glisser corrige la boussole ; sans capteurs, on regarde autour en glissant ou aux flèches | Tests unitaires de géométrie ; test Playwright du mode glisser |
+
+**À vérifier en production**, car le réseau de la session de développement ne joignait ni adsb.lol, ni Planespotters, ni les serveurs de tuiles :
+
+- que `routeset` d'adsb.lol renvoie bien `lat` et `lon` des aéroports (sinon la route s'affiche sans barre d'avancement), et que `/v2/point` donne `desc`, `ownOp`, `year`, `category` et `type` ;
+- que Planespotters accepte les appels du hub et l'affichage de ses miniatures sans en-tête Referer ;
+- le Sky finder sur un iPhone et un Android, dehors : alignement des étiquettes sur les avions réels, avant et après réglage par glissement ;
+- la consommation de tuiles : CARTO est gratuit jusqu'à 75 000 affichages par mois pour un usage non commercial, largement au-dessus d'un usage familial.
+
+## Partie K : source des positions d'avions (20 novembre 2026)
+
+Constat en production après la mise en ligne de la partie J : `/health` affichait `429 Too Many Requests for api.adsb.lol`. adsb.lol limite désormais l'accès sans clé à 500 appels par jour (`x-ratelimit-limit: 500;w=86400`), alors que le hub l'appelait toutes les 10 s (environ 8 600 fois par jour).
+
+| Point | Choix | Preuve |
+|---|---|---|
+| Positions | adsb.fi open data (`opendata.adsb.fi/api/v2/lat/…/lon/…/dist/25`), une requête par seconde autorisée, sans clé, usage non commercial ; même format readsb (liste sous `aircraft`) | Réponse réelle du 20/11/2026 conservée en jeu de test `adsbfi-point-2026-11-20.json` |
+| Secours | adsb.lol si adsb.fi tombe, au plus toutes les 5 min | Test de bascule |
+| Routes | `routeset` d'adsb.lol au plus toutes les 10 min ; au pire 432 appels par jour avec le secours | Test ; le 20/11 à 23 h 36 UTC, `routeset` répondait `201` sans contenu : routes à surveiller |
+| Écartée | airplanes.live : refuse l'accès sans accord préalable (« Please contact us at contact@airplanes.live ») | Réponse 403 du 20/11/2026 |
+
+À terme, l'antenne maison (partie sur les sources) donnerait une clé adsb.lol et des positions vraiment locales.
+
+## Partie L : Beach et Sea réunies, statut de la plage sur l'accueil (21 novembre 2026)
+
+Demandes de Samuel :
+- **Sea dans Beach.** La page Sea avait peu de contenu : marée, houle mesurée et prévue, bouée et prochaines marées forment maintenant la section « The sea » en bas de Beach. L'onglet disparaît ; un ancien lien `#sea` ouvre Beach.
+- **Score de baignade discret.** C'est un calcul : le grand cadran devient une pastille (point de couleur, score, libellé) dans le coin du verdict.
+- **Statut officiel sur l'accueil.** Bandeau compact sous l'heure (drapeau, « Closed: shark sighting », texte des sauveteurs), lien vers Beach ; la jauge Beach affiche « Closed » quand la plage est fermée.
+
+Juge : captures de toutes les vues (jour, nuit, trois formats) et axe sans violation ; plage fermée simulée sur tablette et téléphone.
+
+## Partie M : traces, routes, photos de secours, fiche à côté de la carte (21 novembre 2026)
+
+Retours de Samuel sur la carte en production.
+
+| Demande | Réalisation | Juge |
+|---|---|---|
+| Traces absentes loin de la maison et sur l'avion choisi | `FlightHistory` (hub) : positions de tous les avions vus (maison toutes les 10 s, grand relevé de 250 NM toutes les 30 s, zones de la carte), 3 h gardées, un point toutes les 8 s. Trace courte pour la liste, trace complète de l'avion choisi (`/api/aircraft/:hex/trace`). adsb.fi refuse ses fichiers de traces hors de son site : nos traces commencent à l'entrée de l'avion dans notre champ | Tests unitaires ; Playwright, trace dessinée |
+| Heure de départ | Décollage vu (passage du sol en vol) : « Took off 15:20 » | Test unitaire |
+| D'où, vers où | Routes d'adsbdb.com par indicatif (12 h en cache, une requête par seconde au plus) ; `routeset` d'adsb.lol (vide depuis le 20/11) abandonné | Appel réel : THA472 SYD-BKK, QFA1 SYD-SIN ; tests |
+| Photo quand l'appareil n'en a pas | Planespotters, puis airport-data.com via adsbdb, puis photo Wikipédia du modèle marquée « Similar aircraft, not this one », lien vers le fichier (auteur et licence) | Appel réel adsbdb ; tests ; Wikipédia limite les appels : modèle gardé 7 jours, erreur passagère non retenue |
+| Fiche de l'avion | À droite de la carte sur grand écran, liste des avions proches dessous ; altitude en pieds et en mètres | Captures, axe |
+| Lignes sur la carte | Joints entre tuiles aux zooms fractionnaires : zoom par crans entiers | Capture |
+
+## Partie N : page Weather sur le modèle de Google Météo (21 novembre 2026)
+
+Demande de Samuel : les fonctions de Google Météo.
+- L'instant : conditions, température, ressenti, maximum et minimum du jour.
+- **Avertissements officiels** : flux RSS public NSW du Bureau of Meteorology (`IDZ00054`, usage personnel non commercial). On ne garde que les types utiles à Maroubra : canicule, intempéries, orages violents, feux, houle dangereuse, tsunami, vents forts, et les crues des seules rivières de Sydney. Ils sont pris à l'échelle de l'État ou s'ils nomment Sydney. L'API JSON du BOM, plus précise par district, est écartée : ses conditions interdisent de l'utiliser (« You must not use, copy or share it »).
+- Heure par heure, et dix jours que l'on peut choisir : un jour choisi donne ses heures et ses tuiles.
+- Tuiles : pluie du jour, vent et direction, qualité de l'air, UV, lever et coucher du soleil, visibilité, pression, humidité et point de rosée.
+
+Juge : pour « maintenant », visibilité, pression et point de rosée viennent du METAR de l'aéroport de Sydney (mesures). Les valeurs des jours suivants sont des prévisions Open-Meteo, **pas encore vérifiées dans le Track record** : à ajouter au job de vérification nocturne (lot G.3).
+
+## Partie O : Beach, score en pastilles et webcams en direct (21 novembre 2026)
+
+- Ruban horaire : la courbe du score de baignade, en tête, est retirée ; le score devient une ligne de pastilles colorées sous l'UV.
+- Webcams : la mairie de Randwick diffuse ses caméras par secdn.net (`maroubra_north`, `maroubra_south`, relevés sur sa page des webcams).
+  - Par défaut : l'image en direct publiée pour chaque caméra, renouvelée toutes les 30 s.
+  - « Play live video » tente le flux HLS (`randwickcc-hls.secdn.net/.../playlist.m3u8`, lecteur hls.js chargé à la demande) et revient à l'image s'il ne démarre pas en 12 s.
+  - Le lecteur de la mairie est derrière une vérification Cloudflare : l'adresse du flux vidéo n'a pas pu être confirmée depuis la session de développement. À vérifier en production.
+- CSP : `img-src`, `media-src` et `connect-src` acceptent `https://*.secdn.net`.
+
+## Partie P : Sky plus riche, plan « be ambitious » (21 novembre 2026)
+
+Samuel trouvait la page Sky pauvre. Plan en trois paliers ; les deux premiers sont faits.
+
+1. **Carte du ciel en direct** au-dessus de Maroubra (zénith au centre, nord en haut, est à gauche). Elle montre :
+   - les 1 627 étoiles jusqu'à la magnitude 5 (Hipparcos, données d3-celestial, BSD-3) ;
+   - les constellations et la Voie lactée ;
+   - les planètes, la Lune et le Soleil.
+
+   Toucher un astre le nomme ; un curseur avance l'heure sur 12 h. Le catalogue est chargé à la demande (64 Ko compressés). Juge : Skyfield + DE421 (`bench/stars_reference.py`) sur 20 étoiles et 3 dates de 2026 à 2030, écart maximal 0,37′ (moyen 0,30′) pour un objectif de 1′.
+2. **« Tonight, the best to see »** : passages de l'ISS, planètes à leur plus haut, rapprochements à moins de 4°, cœur de la Voie lactée, essaims d'étoiles filantes actifs (liste de travail de l'IMO, taux attendu en ville), lever de Lune sur la mer, éclipses à 14 jours. Chacun a une heure, une direction et un score de visibilité qui combine les nuages par couche (Open-Meteo), la Lune pour ce qui est pâle et la hauteur. Le score est expérimental.
+3. **À faire** : notification « Look up now » et bilan après coup. Les nuages réels (Himawari) et les votes « Saw it? » jugeront le score, avec un accord go/no-go visé d'au moins 80 % sur un mois. Les étoiles sont aussi à ajouter au Sky finder.
+
+## Partie Q : bus 396 du matin sur l'accueil (21 novembre 2026)
+
+Demande de Samuel : les jours de semaine, les 396 entre 7 h 15 et 7 h 45 et entre 8 h 15 et 8 h 45, depuis « Maroubra Rd after Hereward St » vers Maroubra Junction. Le week-end, on montre le lundi ; après 8 h 45, le jour de semaine suivant.
+
+- **Source officielle** : GTFS des bus de Sydney de Transport for NSW Open Data (CC BY 4.0), publié le 20/11/2026. Arrêt `2035144`, ligne `2509_396`, direction 1 (vers la ville par Maroubra Junction).
+- **Extraction** : `apps/hub/scripts/bus_396.py` construit `apps/web/src/data/bus-396.json`, soit les départs de chaque jour de semaine du 20/11/2026 au 16/09/2027, exceptions du calendrier comprises.
+  - Horaire normal : 07:19, 07:26, 07:35, 07:43, 08:25, 08:35.
+  - Vacances scolaires : 07:16, 07:24, 07:33, 07:42, 08:21, 08:31, 08:41.
+  - Jours fériés : 07:28, 08:15, 08:24, 08:32, 08:42.
+- **Clé d'API** : la clé TfNSW de Samuel est enregistrée dans l'environnement de développement seulement. Elle n'est ni dans le dépôt ni dans la Container App.
+- **Limite** : l'horaire est figé à la date d'extraction. TfNSW publie souvent des mises à jour : relancer le script en cas de changement d'horaire. Un rafraîchissement automatique, et les retards en temps réel (GTFS-realtime), demanderaient la clé comme secret de la Container App. Ce serait un nouveau secret, donc à accepter par Samuel, avec un changement Bicep.
+
+## Partie R : nuit du 21 au 22 novembre 2026
 
 Reprise de toute l'app avec `/be-ambitious`, sans validation intermédiaire (Samuel dort). Rien n'est déployé : tout est sur la branche `claude/zealous-mccarthy-c02vop`, et le déploiement attend l'OK de Samuel, comme le veut le socle. **Aucune ressource Azure nouvelle** : les ajouts utilisent la table `archive` existante et le réseau sortant de l'app.
 
-### I.1 Le but derrière le but, et ce que ça a changé
+### R.1 Le but derrière le but, et ce que ça a changé
 
 Le barreau 3 du plan (« remplacer le rituel, et le prouver ») n'était pas en place : l'archive tournait depuis le 1er novembre, mais aucune prévision de production n'était jugée, et la page Track record ne montrait que le banc d'avant lancement. La nuit a donc visé **la preuve en continu**, puis l'**auto-correction** que cette preuve autorise, puis des **juges** pour les prévisions qui n'en avaient pas.
 
@@ -500,7 +636,7 @@ Le barreau 3 du plan (« remplacer le rituel, et le prouver ») n'était pas en 
 | Depth | Partir des données brutes (METAR, bouée, traces ADS-B, images Himawari) et juger contre une observation, jamais contre soi. |
 | Range | Le métier du satellitaire (navigation géostationnaire, température de brillance) et celui du prévisionniste (MOS, score de Brier) entrent dans le hub. |
 
-### I.2 Ce qui est construit
+### R.2 Ce qui est construit
 
 | Partie | Contenu | Juge |
 |---|---|---|
@@ -508,7 +644,7 @@ Le barreau 3 du plan (« remplacer le rituel, et le prouver ») n'était pas en 
 | Correction apprise en ligne (`derive/correct.ts`) | Biais à moyenne décroissante (méthode NOAA, 10 jours) par tranche d'échéance et heure locale, lissé ; **rejouée sans fuite du futur** (une prévision émise à I n'est corrigée qu'avec les observations antérieures à I) ; appliquée à l'écran **seulement si elle bat le modèle brut sur 14 jours** ; valeurs brutes gardées (`tempRaw`, `windRaw`) et seules archivées | Le Track record vivant lui-même |
 | Archive enrichie | Tous les METAR des 3 dernières heures (avec la pluie), prévision Open-Meteo **au point de l'aéroport** et prévision de vagues **au point de la bouée** (juges sans décalage de lieu), score de lever de soleil émis la veille, issues des annonces de survol, votes, ciel vu par satellite au lever | Lecture compacte : 156 000 lignes relues en 0,6 s, vérifiées en 0,3 s, 25 Mo (mesuré en local) |
 | Juge des survols (`OverheadJudge`) | Chaque « overhead in N min » est suivi sur la trace réelle jusqu'à 3 min après l'heure prévue ; distance minimale calculée sur le segment entre deux relevés | Trace ADS-B |
-| Nuages vus de l'espace (`sources/himawari.ts`) | Lecteur HSD en TypeScript (bande 13, 2 km) ; requête partielle (1,2 Mo) et décodage des deux premiers flux bzip2 seulement (0,3 s) ; navigation géostationnaire CGMS ; ciel clair local (la terre froide la nuit ne passe plus pour du nuage) ; image dans Weather ; au lever du Soleil, nuages le long de son azimut archivés (pas encore jugés, voir I.3) | Pixel de Maroubra : ligne 4459, comme Satpy dans le banc. Côte : le contraste terre et mer de 13 h est maximal à moins d'un pixel (1,5 km) |
+| Nuages vus de l'espace (`sources/himawari.ts`) | Lecteur HSD en TypeScript (bande 13, 2 km) ; requête partielle (1,2 Mo) et décodage des deux premiers flux bzip2 seulement (0,3 s) ; navigation géostationnaire CGMS ; ciel clair local (la terre froide la nuit ne passe plus pour du nuage) ; image dans Weather ; au lever du Soleil, nuages le long de son azimut archivés (pas encore jugés, voir R.3) | Pixel de Maroubra : ligne 4459, comme Satpy dans le banc. Côte : le contraste terre et mer de 13 h est maximal à moins d'un pixel (1,5 km) |
 | Vote du matin | « This morning's sunrise: worth getting up for? » sur l'accueil, du lever à 11 h, une fois par appareil ; `POST /api/vote`, appareil anonymisé (empreinte SHA-256) | Les votes jugent le score de lever de soleil (rang de Spearman, objectif 0,6 sur 8 matins au moins) |
 | Moments du ciel et nuages | ISS et lever de Lune sur la mer tus si le ciel sera couvert (85 %), signalés dès 50 % ; nuit noire, planètes et titre du soir annotés | Tests unitaires |
 | Cartes | Côte GSHHG pleine résolution, découpée (Sutherland-Hodgman) et simplifiée (Douglas-Peucker) : le port de Sydney et Botany Bay apparaissent, les îlots parasites disparaissent | Comparaison visuelle, alignement satellite |
@@ -516,7 +652,7 @@ Le barreau 3 du plan (« remplacer le rituel, et le prouver ») n'était pas en 
 | Téléphone | Graphiques larges ouverts sur ce qui compte (Soleil ou Lune, maison, instant présent) ; Track record compact | Captures Playwright, 0 débordement |
 | Fiabilité | Notifications déjà envoyées gardées dans Table Storage (pas de doublon au redéploiement) ; une prévision non rafraîchie depuis 90 min n'est plus réarchivée comme neuve ; une vue qui ne charge pas affiche « Retry » au lieu d'un écran blanc ; la pastille de reconnexion ne fait plus sauter l'écran | Relecture indépendante du code de la nuit (3 bogues et 4 risques trouvés, tous corrigés et testés) ; Lighthouse : décalage 0,107 → 0,015, performance mobile 95 → 98 |
 
-### I.3 Constats du hub réel lancé ici
+### R.3 Constats du hub réel lancé ici
 
 Le hub construit comme en production a tourné dans cette session sur les sources joignables (avions, METAR, bouées, satellite ; Open-Meteo par intermittence) :
 
@@ -524,7 +660,7 @@ Le hub construit comme en production a tourné dans cette session sur les source
 - **Score de baignade à 10/10 sans aucune donnée de vagues** (Open-Meteo Marine bloqué) : plafonné à 7 avec la raison affichée.
 - **Brief par règles qui répétait « Best swim »** quand le premier moment était le même créneau : corrigé.
 
-### I.4 Ce qui a été essayé et écarté (objectifs manqués, gardés visibles)
+### R.4 Ce qui a été essayé et écarté (objectifs manqués, gardés visibles)
 
 | Essai | Résultat | Décision |
 |---|---|---|
@@ -533,7 +669,7 @@ Le hub construit comme en production a tourné dans cette session sur les source
 | Secteur d'horizon marin mesuré sur la côte GSHHG | GSHHG lisse la baie de Maroubra (environ 800 m) : sa ligne d'eau passe 785 m à l'est de la plage | Hypothèse 40° à 160° gardée, et affichée comme hypothèse |
 | Beachwatch (qualité de l'eau officielle) et radar RainViewer | Hôtes refusés par le réseau de cette session ; format impossible à vérifier | Pas codé à l'aveugle ; à faire depuis une session qui les joint |
 
-### I.5 Avant de déployer
+### R.5 Avant de déployer
 
 1. Relire la branche, puis fusionner dans `main` après OK : le workflow teste, construit et déploie. Pas de what-if nécessaire (aucun changement Bicep).
 2. Dans `/health`, trois sources nouvelles doivent passer à `ok: true` : `fc-airport`, `fc-buoy`, `satellite`, puis `verify`.

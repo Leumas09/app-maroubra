@@ -1,7 +1,7 @@
 import { serve } from "@hono/node-server";
-import type { Beach, Buoy, Fires, Flights, Iss, Marine, Moment, SpaceWeather, Sunrise, Weather } from "@maroubra/core";
+import type { Beach, BeachStatus, Buoy, Fires, Flights, Iss, Marine, Moment, SpaceWeather, Sunrise, Weather } from "@maroubra/core";
 import { archiveHour, archiveOutcome, archiveSunriseSky, archiveReader, archiveVote, memoryArchive, tableArchive, type ArchiveTable } from "./archive";
-import { startCollectors, type Collector } from "./collector";
+import { startCollectors, Waiting, type Collector } from "./collector";
 import { loadConfig } from "./config";
 import { beach } from "./derive/beach";
 import { facts, writeBrief } from "./derive/brief";
@@ -10,15 +10,17 @@ import { sunrise } from "./derive/sunrise";
 import { loadTide } from "./derive/tide";
 import { verify } from "./derive/verify";
 import { foundryLlm } from "./llm";
+import { photoFinder } from "./photos";
 import { Push } from "./push";
 import { createApp } from "./server";
-import { flightsCollector } from "./sources/flights";
+import { areaFinder, flightShared, flightsCollector } from "./sources/flights";
 import { air, fires, space } from "./sources/hazards";
 import { issCollector } from "./sources/iss";
 import { newsCollector } from "./sources/news";
+import { beachStatus } from "./sources/beach-status";
 import { satelliteCollector } from "./sources/himawari";
 import { buoy, buoyForecast, marine, nearshoreBuoy } from "./sources/sea";
-import { airportForecast, metar, weather } from "./sources/weather";
+import { airportForecast, metar, warnings, weather } from "./sources/weather";
 import { Store } from "./store";
 import { azureCredential, table } from "./tables";
 
@@ -50,8 +52,8 @@ const derived: Collector[] = [
     id: "beach", everyMs: 10 * 60e3, staleAfterMs: 2 * 3600e3,
     run: async ({ store: s, now }) => {
       const w = s.data<Weather>("weather");
-      if (!w) throw new Error("waiting for weather");
-      return beach(w, s.data<Marine>("marine"), s.data<Buoy>("buoy"), tide, now.getTime());
+      if (!w) throw new Waiting("weather");
+      return beach(w, s.data<Marine>("marine"), s.data<Buoy>("buoy"), tide, now.getTime(), s.data<BeachStatus>("beachStatus"));
     },
   },
   {
@@ -79,14 +81,17 @@ const derived: Collector[] = [
   {
     id: "brief", everyMs: 30 * 60e3, staleAfterMs: 2 * 3600e3,
     run: async ({ store: s, now }) => {
-      if (!s.data("weather")) throw new Error("waiting for weather");
+      if (!s.data("weather")) throw new Waiting("weather");
       return writeBrief(llm, facts(s.data<Weather>("weather"), s.data<Beach>("beach"), tideNext(now), s.data<Moment[]>("moments") ?? [], now), now);
     },
   },
 ];
 
+// Routes et traces d'avions partagées entre le relevé de la maison et les zones demandées par la carte.
+const flights = flightShared();
+
 const collectors: Collector[] = [
-  weather, metar, marine, buoy, nearshoreBuoy, airportForecast, buoyForecast, flightsCollector((o) => void archiveOutcome(archive, o)),
+  weather, metar, warnings, marine, buoy, nearshoreBuoy, airportForecast, buoyForecast, beachStatus, flightsCollector(flights, (o) => void archiveOutcome(archive, o)),
   satelliteCollector({ onImage: (png) => { satellitePng = png; }, onSunrise: (s) => void archiveSunriseSky(archive, s) }), fires, air, space, issCollector(), sunrise, newsCollector(llm), ...derived,
 ];
 startCollectors(store, collectors, { offline: cfg.offline });
@@ -107,7 +112,10 @@ if (archive && !cfg.offline) {
   setTimeout(() => { tick(); setInterval(tick, 3600e3); }, 5 * 60e3);
 }
 
-const app = createApp(cfg, store, { push: push ?? undefined, vote: (v) => archiveVote(archive, v), satellite: () => satellitePng });
+const app = createApp(cfg, store, {
+  push: push ?? undefined, vote: (v) => archiveVote(archive, v), satellite: () => satellitePng,
+  photos: cfg.offline ? undefined : photoFinder(), area: cfg.offline ? undefined : areaFinder(flights), history: flights.history,
+});
 serve({ fetch: app.fetch, port: cfg.port }, (info) => {
   console.log(JSON.stringify({ event: "listening", port: info.port, version: cfg.version, llm: !!llm, push: !!push, archive: !!archive }));
 });

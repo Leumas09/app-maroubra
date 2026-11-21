@@ -132,7 +132,7 @@ describe("annonces de survol jugées sur la trace réelle", () => {
   const ac = (hex: string, lat: number, lon: number, overhead: Aircraft["overhead"]): Aircraft => ({
     hex, callsign: hex, reg: null, type: null, altFt: 3000, onGround: false, speedKt: 200, track: 270, vrate: 0, lat, lon, distKm: 5, bearing: 90,
     military: false, interesting: false, rare: null, emergency: null, route: null, overhead, trail: [],
-  });
+  }) as unknown as Aircraft;
   it("mesure le passage au plus près sur le segment, pas seulement aux points échantillonnés", () => {
     expect(segmentMinKm([home.lat, home.lon + 0.02], [home.lat, home.lon - 0.02])).toBeLessThan(0.01);
   });

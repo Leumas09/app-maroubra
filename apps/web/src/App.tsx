@@ -1,6 +1,6 @@
 import { Component, lazy as reactLazy, Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
 import type * as React from "react";
-import type { AirQuality, Beach as BeachData, Brief, Buoy, Fires, Flights, Iss, Marine, Metar, Moment, News as NewsData, Satellite, SpaceWeather, Sunrise, Verification, Weather as WeatherData } from "@maroubra/core";
+import type { AirQuality, Beach as BeachData, BeachStatus, Brief, Buoy, Fires, Flights, Iss, Marine, Metar, Moment, News as NewsData, Satellite, SpaceWeather, Sunrise, Verification, Weather as WeatherData, WeatherWarnings } from "@maroubra/core";
 import { data, entry, isDemo, useLive } from "./lib/live";
 import type { SkyModel } from "./lib/sky-model";
 import { loadTide, type TideTable } from "./lib/tide";
@@ -42,12 +42,11 @@ const FireAir = lazy(() => import("./views/FireAir"), "FireAir") as unknown as t
 const News = lazy(() => import("./views/News"), "News") as unknown as typeof import("./views/News")["News"];
 const Overhead = lazy(() => import("./views/Overhead"), "Overhead") as unknown as typeof import("./views/Overhead")["Overhead"];
 const Settings = lazy(() => import("./views/Settings"), "Settings") as unknown as typeof import("./views/Settings")["Settings"];
-const Sea = lazy(() => import("./views/Tide"), "Sea") as unknown as typeof import("./views/Tide")["Sea"];
 const TrackRecord = lazy(() => import("./views/TrackRecord"), "TrackRecord") as unknown as typeof import("./views/TrackRecord")["TrackRecord"];
 const Weather = lazy(() => import("./views/Weather"), "Weather") as unknown as typeof import("./views/Weather")["Weather"];
 
-type View = "home" | "weather" | "beach" | "sea" | "sky" | "overhead" | "fire" | "news" | "track" | "settings";
-const VIEWS: View[] = ["home", "weather", "beach", "sea", "sky", "overhead", "fire", "news", "track", "settings"];
+type View = "home" | "weather" | "beach" | "sky" | "overhead" | "fire" | "news" | "track" | "settings";
+const VIEWS: View[] = ["home", "weather", "beach", "sky", "overhead", "fire", "news", "track", "settings"];
 
 /** `?at=2026-11-14T09:00:00Z` fige l'heure (captures et tests). */
 function startTime(): Date | null {
@@ -105,7 +104,8 @@ export function App() {
   useWakeLock(ambient);
 
   const night = sky?.isNight;
-  const fromHash = () => VIEWS.find((v) => location.hash === `#${v}`) ?? null;
+  // L'ancienne page Sea fait maintenant partie de Beach : les anciens liens #sea y mènent.
+  const fromHash = () => (location.hash === "#sea" ? "beach" : VIEWS.find((v) => location.hash === `#${v}`) ?? null);
   const [view, setView] = useState<View | null>(fromHash);
   useEffect(() => {
     const on = () => setView(fromHash());
@@ -126,6 +126,7 @@ export function App() {
 
   const weather = entry<WeatherData>(snap, "weather");
   const beach = entry<BeachData>(snap, "beach");
+  const beachStatus = entry<BeachStatus>(snap, "beachStatus");
   const flights = entry<Flights>(snap, "flights");
   const fires = entry<Fires>(snap, "fires");
   const air = entry<AirQuality>(snap, "air");
@@ -161,8 +162,7 @@ export function App() {
         <nav className="rail-main" aria-label="Views">
           {link("home", night ? "Tonight" : "Today")}
           {link("weather", "Weather")}
-          {link("beach", "Beach")}
-          {link("sea", "Sea")}
+          {link("beach", "Beach", beachStatus?.data?.status === "closed" ? { alert: "closed today" } : {})}
           {link("sky", "Sky")}
           {link("overhead", "Overhead")}
           {link("fire", "Fire & smoke", urgentFire ? { alert: "check alerts" } : {})}
@@ -182,12 +182,11 @@ export function App() {
         </div>
         <ViewBoundary view={current}>
         <Suspense fallback={<div className="card" style={{ minHeight: 320 }} aria-busy="true" />}>
-        {current === "home" && <Home now={now} sky={sky} brief={brief?.text ?? null} beach={beach} weather={weather} buoy={buoy} marine={entry<Marine>(snap, "marine")} sunrise={entry<Sunrise>(snap, "sunrise")} space={entry<SpaceWeather>(snap, "space")} moments={moments} />}
-        {current === "weather" && <Weather e={weather} metar={entry<Metar>(snap, "metar")} air={air} sat={entry<Satellite>(snap, "satellite")} night={!!night} />}
-        {current === "beach" && <Beach e={beach} now={now} />}
-        {current === "sea" && <Sea table={tide} now={now} buoy={buoy} near={entry<Buoy>(snap, "buoy-near")} marine={entry<Marine>(snap, "marine")} />}
-        {current === "sky" && (sky ? <Sky s={sky} iss={entry<Iss>(snap, "iss")} space={entry<SpaceWeather>(snap, "space")} sunrise={entry<Sunrise>(snap, "sunrise")} weather={weather?.data} /> : <div className="card" style={{ minHeight: 320 }} aria-busy="true" />)}
-        {current === "overhead" && <Overhead e={flights} />}
+        {current === "home" && <Home now={now} sky={sky} brief={brief?.text ?? null} beach={beach} beachStatus={beachStatus} weather={weather} buoy={buoy} marine={entry<Marine>(snap, "marine")} sunrise={entry<Sunrise>(snap, "sunrise")} space={entry<SpaceWeather>(snap, "space")} moments={moments} />}
+        {current === "weather" && <Weather e={weather} metar={entry<Metar>(snap, "metar")} air={air} warnings={entry<WeatherWarnings>(snap, "warnings")} sat={entry<Satellite>(snap, "satellite")} night={!!night} now={now} />}
+        {current === "beach" && <Beach e={beach} status={beachStatus} tide={tide} now={now} buoy={buoy} near={entry<Buoy>(snap, "buoy-near")} marine={entry<Marine>(snap, "marine")} demo={isDemo(snap)} />}
+        {current === "sky" && (sky ? <Sky s={sky} iss={entry<Iss>(snap, "iss")} space={entry<SpaceWeather>(snap, "space")} sunrise={entry<Sunrise>(snap, "sunrise")} hours={weather?.data?.hourly ?? null} /> : <div className="card" style={{ minHeight: 320 }} aria-busy="true" />)}
+        {current === "overhead" && <Overhead e={flights} night={!!night} demo={isDemo(snap)} />}
         {current === "fire" && <FireAir fires={fires} />}
         {current === "news" && <News e={news} now={now} />}
         {current === "track" && <TrackRecord live={entry<Verification>(snap, "verify")} />}

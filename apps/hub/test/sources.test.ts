@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { beach, label, nearshoreFactor, scoreHour, windSide } from "../src/derive/beach";
+import { beach, explainBest, label, nearshoreFactor, scoreHour, windSide } from "../src/derive/beach";
+import { closureReason, parseBeachsafe, parseBeachwatch, parseLifeguards, reportFields } from "../src/sources/beach-status";
 import { due, moments } from "../src/derive/moments";
 import { ruleBrief } from "../src/derive/brief";
 import { scoreSunrise } from "../src/derive/sunrise";
@@ -10,7 +11,7 @@ import { isCurfew, normalize, predictOverhead, runwayMode, type RawAc } from "..
 import { auroraFromKp, parseDescription, parseFires, parseSpace } from "../src/sources/hazards";
 import { dedupe, keywordLocal, parseRss } from "../src/sources/news";
 import { parseBuoyRows } from "../src/sources/sea";
-import { parseMetar, parseWeather } from "../src/sources/weather";
+import { parseMetar, parseWarnings, parseWeather } from "../src/sources/weather";
 import { outputText } from "../src/llm";
 
 const rfs = JSON.parse(readFileSync(new URL("./fixtures/rfs-majorincidents-2020-10-10.json", import.meta.url), "utf8"));
@@ -142,6 +143,49 @@ describe("plage", () => {
     expect(b.best).not.toBeNull();
     expect(b.best!.score).toBeGreaterThanOrEqual(8);
     expect(b.sea.label).toBe("Clean");
+    expect(b.hours[0].pen).toBeDefined();
+    expect(b.best!.because.length).toBeGreaterThan(0);
+  });
+  it("fermeture officielle du jour : score à zéro et raison affichée", () => {
+    const s = scoreHour({ ...base, t: Date.parse("2026-11-09T01:00:00Z") / 1000 }, { ...ctx, closed: { reason: "Shark sighting", day: "2026-11-09" } });
+    expect(s.score).toBe(0);
+    expect(s.reasons.find((r) => r.key === "official")?.text).toBe("Closed by the lifeguards: shark sighting");
+  });
+  it("Beachwatch remplace la règle de la pluie récente", () => {
+    expect(scoreHour(base, { ...ctx, afterRain: true, pollution: "Unlikely" }).reasons.some((r) => r.key === "stormwater")).toBe(false);
+    expect(scoreHour(base, { ...ctx, pollution: "Likely" }).score).toBeLessThanOrEqual(6);
+  });
+  it("le meilleur créneau s'explique par le vent qui tourne", () => {
+    const h = (t: number, side: "offshore" | "onshore", wind: number, windPen: number) => ({ t, score: 10 - windPen, surf: 0.5, period: 9, swellDir: 120, wind, gust: wind, windDir: side === "offshore" ? 270 : 60, side, sst: 21, feels: 25, uv: 6, pop: 0, pen: windPen ? { wind: windPen } : {} });
+    const t0 = Date.parse("2026-12-05T21:00:00Z") / 1000;
+    const day = [h(t0, "offshore", 8, 0), h(t0 + 3600, "offshore", 10, 0), h(t0 + 7200, "onshore", 22, 1), h(t0 + 10800, "onshore", 28, 2)];
+    const e = explainBest(day, t0, t0 + 7200, []);
+    expect(e.because[0]).toMatch(/^Offshore W wind 8 km\/h; onshore ENE 28 km\/h at 11:00$/);
+  });
+});
+
+describe("statut officiel de la plage", () => {
+  const xml = readFileSync(new URL("./fixtures/randwick-lifeguards-2026-11-09.xml", import.meta.url), "utf8");
+  it("rapport des sauveteurs de Randwick : fermée, raison, champs, photo (capture du 09/11/2026)", () => {
+    const r = parseLifeguards(xml, new Date("2026-11-09T01:00:00Z"))!;
+    expect(r.status).toBe("closed");
+    expect(r.reason).toBe("Dangerous surf");
+    expect(r.lifeguard).toMatchObject({ rips: "Dangerous", bluebottles: "None sighted", waterTemp: "20 C", waveHeight: "+2m", today: true });
+    expect(r.lifeguard!.photo).toMatch(/^https:\/\/www\.randwick\.nsw\.gov\.au\/__data\/assets\/image\//);
+    expect(r.lifeguard!.at).toBe("2026-11-08T19:48:26.000Z");
+  });
+  it("un rapport de la veille ne donne pas de statut", () => {
+    expect(parseLifeguards(xml, new Date("2026-11-10T01:00:00Z"))!.status).toBe("unknown");
+  });
+  it("champs mal formés et raisons de fermeture", () => {
+    expect(reportFields("<p><strong>Beach Status</strong>: Open</p><p><strong>Rips:</strong> Be cautious</p>")).toEqual({ "beach status": "Open", rips: "Be cautious" });
+    expect(closureReason("Beach closed. Shark sighted off the south end.")).toBe("Shark sighting");
+    expect(closureReason("Closed due to poor water quality after rain")).toBe("Water pollution");
+  });
+  it("Beachwatch et Beachsafe", () => {
+    expect(parseBeachwatch({ features: [{ properties: { siteName: "South Maroubra Beach", pollutionForecast: "Likely" } }, { properties: { siteName: "Maroubra Beach", pollutionForecast: "Unlikely", latestResult: "Good" } }] }))
+      .toEqual({ forecast: "Unlikely", latest: "Good", at: null });
+    expect(parseBeachsafe({ beach: { hazard: 6, is_patrolled_today: { flag: true, start: "07:00", end: "19:00" } } })).toEqual({ patrol: { today: true, start: "07:00", end: "19:00" }, hazard: 6 });
   });
 });
 
@@ -233,5 +277,19 @@ describe("défauts vus sur le hub réel", () => {
     const text = ruleBrief({ localTime: "Sunday 06:00", weather: null, beach: { score: 9, label: "Great", best: "07:00 to 09:00 (9/10)", sea: "Clean", waterC: 21 }, moments: [{ title: "Best swim 07:00 to 09:00", detail: "" }, { title: "Space Station overhead at 20:12", detail: "" }] });
     expect(text.match(/Best swim/g)).toHaveLength(1);
     expect(text).toMatch(/Space Station/);
+  });
+});
+
+describe("avertissements du BOM (flux RSS NSW réel du 21/11/2026)", () => {
+  const xml = readFileSync(new URL("./fixtures/bom-warnings-nsw-2026-11-21.xml", import.meta.url), "utf8");
+  it("garde la canicule à l'échelle de l'État, écarte le résumé marin et les crues de l'intérieur", () => {
+    const w = parseWarnings(xml);
+    expect(w.items.map((x) => x.title)).toEqual(["Heatwave Warning (NSW)"]);
+    expect(w.items[0]).toMatchObject({ statewide: true, link: "https://reg.bom.gov.au/nsw/warnings/heatwave.shtml" });
+  });
+  it("garde un avertissement qui nomme Sydney, écarte celui d'une autre région", () => {
+    const item = (t: string) => `<item><title>21/16:00 EDT ${t}</title><link>http://reg.bom.gov.au/x.shtml</link><pubDate>Sat, 21 Nov 2026 05:00:00 GMT</pubDate></item>`;
+    const w = parseWarnings(`<rss><channel>${item("Severe Thunderstorm Warning for Metropolitan Sydney")}${item("Fire Weather Warning for Northern Slopes")}</channel></rss>`);
+    expect(w.items).toEqual([{ title: "Severe Thunderstorm Warning for Metropolitan Sydney", link: "https://reg.bom.gov.au/x.shtml", at: "2026-11-21T05:00:00.000Z", statewide: false }]);
   });
 });

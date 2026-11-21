@@ -73,14 +73,15 @@ function SwellChart({ buoy, near, marine, now }: { buoy: Buoy | null; near: Buoy
   );
 }
 
-export function Sea({ table, now, buoy, near, marine }: { table: TideTable | null; now: Date; buoy: E<Buoy>; near: E<Buoy>; marine: E<Marine> }) {
+/** La mer (marée, houle mesurée et prévue, bouées du large et près du bord), affichée en bas de la page Beach. */
+export function SeaSection({ table, now, buoy, near, marine }: { table: TideTable | null; now: Date; buoy: E<Buoy>; near?: E<Buoy>; marine: E<Marine> }) {
   const t = table && tideNow(table, now);
   const b = buoy?.data?.latest;
   const sst = marine?.data?.hourly[0]?.sst;
   return (
-    <section aria-labelledby="tide-title" style={{ display: "grid", gap: 16 }}>
+    <section id="sea" aria-labelledby="sea-title" className="sea-section">
       <div className="card">
-        <h1 id="tide-title" style={{ margin: "0 0 8px", fontSize: 15, color: "var(--muted)" }}>The sea at Maroubra</h1>
+        <h2 id="sea-title">The sea</h2>
         {t ? (
           <p className="lede">
             Tide {t.rising ? "rising" : "falling"}, {t.next.kind} at {time(t.next.t)} ({signed(t.next.h)}).

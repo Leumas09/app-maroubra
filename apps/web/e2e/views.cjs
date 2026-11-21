@@ -8,7 +8,7 @@ const runs = [
   { name: "day", base: "http://localhost:8100", at: "2026-11-14T03:00:00Z" },
   { name: "night", base: "http://localhost:8101", at: "2026-11-14T11:30:00Z" },
 ];
-const views = (process.env.VIEWS || "home,weather,beach,sea,sky,overhead,fire,news,track,settings").split(",");
+const views = (process.env.VIEWS || "home,weather,beach,sky,overhead,fire,news,track,settings").split(",");
 
 (async () => {
   const browser = await chromium.launch();

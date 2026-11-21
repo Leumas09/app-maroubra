@@ -21,6 +21,9 @@ export interface WeatherHour {
   uv: number;
   visibility: number | null; // m
   humidity: number;
+  pressure?: number | null; // hPa, niveau de la mer
+  dewPoint?: number | null; // °C
+  isDay?: boolean;
 }
 
 export interface WeatherDay {
@@ -34,15 +37,22 @@ export interface WeatherDay {
   windMax: number;
   gustMax: number;
   windDir: number;
+  sunrise?: number | null; // secondes Unix
+  sunset?: number | null;
 }
 
 export interface Weather {
-  current: { t: number; temp: number; feels: number; humidity: number; precip: number; code: number; cloud: number; wind: number; windDir: number; gust: number; uv: number; isDay: boolean };
+  current: { t: number; temp: number; feels: number; humidity: number; precip: number; code: number; cloud: number; wind: number; windDir: number; gust: number; uv: number; isDay: boolean; pressure?: number | null; dewPoint?: number | null; visibility?: number | null };
   hourly: WeatherHour[];
   daily: WeatherDay[];
   rainPast24h: number;
   /** Correction locale appliquée (températures et vent heure par heure), mesurée sur la fenêtre glissante. */
   corrected?: { temp: boolean; wind: boolean; note: string };
+}
+
+/** Avertissements officiels du Bureau of Meteorology qui concernent Sydney (flux RSS public NSW). */
+export interface WeatherWarnings {
+  items: { title: string; link: string; at: string; statewide: boolean }[];
 }
 
 export interface Metar {
@@ -99,6 +109,12 @@ export interface Aircraft {
   callsign: string | null;
   reg: string | null;
   type: string | null;
+  /** Désignation lisible du type, quand la base d'adsb.lol la connaît (« BOEING 737-800 »). */
+  desc: string | null;
+  /** Catégorie ADS-B (A1 léger à A5 lourd, A7 hélicoptère, B1 planeur...). */
+  category: string | null;
+  operator: string | null;
+  built: number | null; // année de construction
   altFt: number | null; // null au sol
   onGround: boolean;
   speedKt: number | null;
@@ -106,21 +122,59 @@ export interface Aircraft {
   vrate: number | null;
   lat: number;
   lon: number;
+  /** Instant de la position (ms depuis 1970), pour l'extrapolation côté app. */
+  posAt: number;
+  /** Origine de la position : ADS-B, MLAT, TIS-B... */
+  source: string | null;
+  squawk: string | null;
   distKm: number;
   bearing: number;
   military: boolean;
   interesting: boolean;
   rare: string | null; // pourquoi il est remarquable
-  emergency: string | null;
+  emergency: string | null; // libellé lisible (« General emergency »)
+  airline: Airline | null;
+  /** Numéro de vol commercial déduit de l'indicatif (QFA1 donne QF1), seulement si la compagnie numérote ainsi. */
+  flightNo: string | null;
+  /** Route complète (codes) ; from et to désignent l'étape en cours. */
   route: { codes: string; from?: Airport; to?: Airport } | null;
+  /** Avancement sur l'étape en cours, mesuré en distance (pas une prévision). */
+  progress: { pct: number; flownKm: number; leftKm: number } | null;
   overhead: { inMin: number; closestKm: number } | null;
   trail: [number, number][];
+  /** Décollage vu par le hub (ms depuis 1970), null si l'avion volait déjà à son entrée dans notre champ. */
+  tookOffAt?: number | null;
+}
+
+export interface Airline {
+  icao: string;
+  iata: string;
+  name: string;
+  color: string;
 }
 
 export interface Airport {
   iata: string;
+  icao?: string;
   name: string;
   location: string;
+  lat?: number;
+  lon?: number;
+}
+
+/** Photo d'un avion (Planespotters), affichée avec le nom du photographe et un lien vers la page d'origine. */
+export interface AircraftPhoto {
+  /** « exact » : cet appareil ; « type » : un appareil du même modèle, à titre d'illustration. */
+  kind?: "exact" | "type";
+  /** Nom du modèle illustré (photo de type). */
+  typeName?: string;
+  /** Source affichée dans le crédit. */
+  site?: string;
+  src: string;
+  width: number;
+  height: number;
+  link: string;
+  photographer: string;
 }
 
 export interface Flights {
@@ -130,6 +184,8 @@ export interface Flights {
   seenToday: number;
   /** Annonces « overhead in N min » vérifiées depuis le démarrage du hub. */
   judged?: { announced: number; hits: number; since: string };
+  /** Agrégateur qui a fourni les positions (adsb.fi, ou adsb.lol en secours). */
+  source?: string;
 }
 
 export interface Fire {
@@ -199,21 +255,46 @@ export interface News {
   triagedBy: "model" | "keywords";
 }
 
+export type BeachFactorKey = "surf" | "period" | "wind" | "water" | "air" | "rain" | "stormwater" | "tide" | "bluebottles" | "uv" | "official";
+
+export interface BeachReason {
+  key: BeachFactorKey;
+  text: string;
+  effect: "plus" | "minus" | "info";
+  /** Points retirés au score de 10 (0 si le facteur n'enlève rien). */
+  pts: number;
+}
+
 export interface SwimHour {
   t: number;
   score: number;
+  surf: number | null; // m à la plage
+  period: number | null; // s
+  swellDir: number | null; // provenance, degrés
+  wind: number; // km/h
+  gust: number;
+  windDir: number; // provenance, degrés
+  side: "offshore" | "cross-shore" | "onshore";
+  sst: number | null;
+  feels: number;
+  uv: number;
+  pop: number | null;
+  /** Points retirés par facteur, pour expliquer les écarts entre les heures. */
+  pen: Partial<Record<BeachFactorKey, number>>;
 }
 
 export interface Beach {
   score: number; // 0 à 10
   label: "Great" | "Good" | "Fair" | "Poor" | "Stay out";
-  reasons: { text: string; effect: "plus" | "minus" | "info" }[];
-  best: { start: number; end: number; score: number } | null;
+  reasons: BeachReason[];
+  best: { start: number; end: number; score: number; because: string[]; still: string[] } | null;
   hours: SwimHour[];
-  sea: { label: string; surfM: number | null; periodS: number | null; dir: number | null; wind: string };
+  sea: { label: string; surfM: number | null; periodS: number | null; dir: number | null; wind: string; windKmh: number; gustKmh: number; windDir: number; side: SwimHour["side"] };
   bluebottles: boolean;
   afterRain: boolean;
   waterTemp: number | null;
+  /** Normale à la plage (degrés) : la mer est de ce côté. */
+  facing: number;
 }
 
 export interface Sunrise {
@@ -325,4 +406,30 @@ export interface Satellite {
   within50km: SatelliteCloud | null;
   /** Nuages le long de l'azimut du lever de soleil, à 0, 30, 80 et 150 km. */
   alongSunrise: { km: number; cloud: SatelliteCloud | null }[];
+}
+
+/**
+ * Statut officiel de la plage : rapport du matin des sauveteurs de Randwick City Council (flux RSS),
+ * prévision de pollution Beachwatch (NSW), horaires de surveillance et note de danger Beachsafe (SLSA).
+ * Chaque partie peut manquer : les sources sont indépendantes.
+ */
+export interface BeachStatus {
+  status: "open" | "closed" | "unknown";
+  /** Raison de la fermeture, tirée du texte des sauveteurs (houle, requin, pollution…). */
+  reason: string | null;
+  lifeguard: {
+    summary: string | null;
+    description: string | null;
+    rips: string | null;
+    bluebottles: string | null;
+    waterTemp: string | null;
+    waveHeight: string | null;
+    at: string; // ISO, heure de publication
+    today: boolean; // publié aujourd'hui (heure de Sydney)
+    photo: string | null; // photo du matin publiée par la mairie
+  } | null;
+  patrol: { today: boolean; start: string | null; end: string | null } | null;
+  hazard: number | null; // note Beachsafe de 1 à 10
+  water: { forecast: "Unlikely" | "Possible" | "Likely" | null; latest: string | null; at: string | null } | null;
+  errors: string[];
 }

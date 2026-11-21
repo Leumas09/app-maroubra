@@ -9,6 +9,9 @@ import { join } from "node:path";
 import { Auth, clientIp, COOKIE, LoginLimiter } from "./auth";
 import type { Config } from "./config";
 import { loginPage } from "./login-page";
+import type { Aircraft } from "@maroubra/core";
+import type { PhotoFinder } from "./photos";
+import type { FlightHistory } from "./sources/history";
 import type { Push } from "./push";
 import type { Store } from "./store";
 
@@ -18,7 +21,13 @@ const SSE_HEARTBEAT_MS = 15_000;
 
 export interface Vote { date: string; value: number; voter: string }
 
-export function createApp(cfg: Config, store: Store, deps: { push?: Push; vote?: (v: Vote) => Promise<void>; satellite?: () => Buffer | null } = {}) {
+/** Hôtes d'images externes : webcams de Randwick, fonds de carte (OpenStreetMap, Esri), photos d'avions (Planespotters, airport-data.com, Wikimedia). */
+const IMG_HOSTS = "https://www.randwick.nsw.gov.au https://tile.openstreetmap.org https://server.arcgisonline.com https://*.plnspttrs.net https://*.planespotters.net " +
+  "https://image.airport-data.com https://airport-data.com https://upload.wikimedia.org https://thumb.wikimedia.org https://*.secdn.net";
+/** Flux vidéo des webcams de Randwick (HLS, servi par secdn.net). */
+const MEDIA_HOSTS = "https://*.secdn.net";
+
+export function createApp(cfg: Config, store: Store, deps: { push?: Push; vote?: (v: Vote) => Promise<void>; satellite?: () => Buffer | null; photos?: PhotoFinder; area?: (lat: number, lon: number, nm: number) => Promise<Aircraft[]>; history?: FlightHistory } = {}) {
   const app = new Hono();
   const auth = new Auth(cfg.password!, cfg.sessionSecret);
   const limiter = new LoginLimiter();
@@ -33,8 +42,8 @@ export function createApp(cfg: Config, store: Store, deps: { push?: Push; vote?:
     if (cfg.secureCookies) c.header("Strict-Transport-Security", "max-age=31536000");
     c.header(
       "Content-Security-Policy",
-      "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; " +
-        "font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+      `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: ${IMG_HOSTS}; ` +
+        `font-src 'self' data:; connect-src 'self' ${MEDIA_HOSTS}; media-src 'self' blob: ${MEDIA_HOSTS}; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'`,
     );
   });
 
@@ -93,7 +102,7 @@ export function createApp(cfg: Config, store: Store, deps: { push?: Push; vote?:
 
   app.get("/api/state", (c) => {
     c.header("Cache-Control", "no-store");
-    return c.json(store.snapshot());
+    return c.json({ ...store.snapshot(), build: cfg.version });
   });
 
   app.get("/api/stream", (c) => {
@@ -101,7 +110,8 @@ export function createApp(cfg: Config, store: Store, deps: { push?: Push; vote?:
     c.header("X-Accel-Buffering", "no");
     return streamSSE(c, async (stream) => {
       const snap = store.snapshot();
-      await stream.writeSSE({ event: "snapshot", data: JSON.stringify(snap), id: String(snap.version), retry: 1000 });
+      // build : version servie ; l'app se recharge seule quand elle change (écran ambiant resté ouvert).
+      await stream.writeSSE({ event: "snapshot", data: JSON.stringify({ ...snap, build: cfg.version }), id: String(snap.version), retry: 1000 });
       const queue: string[] = [];
       let wake: (() => void) | null = null;
       const unsubscribe = store.subscribe((id, entry, version) => {
@@ -145,6 +155,39 @@ export function createApp(cfg: Config, store: Store, deps: { push?: Push; vote?:
     const id = createHash("sha256").update(voter).digest("hex").slice(0, 16);
     await deps.vote?.({ date, value, voter: id });
     return c.json({ ok: true });
+  });
+
+  // Avions d'une zone (centre et rayon en milles nautiques), quand la carte sort des environs de la maison.
+  app.get("/api/aircraft/area", async (c) => {
+    const lat = Number(c.req.query("lat")), lon = Number(c.req.query("lon")), r = Number(c.req.query("r"));
+    if (!(Math.abs(lat) <= 90 && Math.abs(lon) <= 180 && r > 0 && r <= 1000)) return c.json({ error: "bad area" }, 400);
+    c.header("Cache-Control", "no-store");
+    if (!deps.area) return c.json({ aircraft: [] });
+    try {
+      return c.json({ aircraft: await deps.area(lat, lon, r) });
+    } catch (err) {
+      return c.json({ error: String((err as Error).message ?? err) }, 502);
+    }
+  });
+
+  // Trace complète d'un avion (jusqu'à 3 h) et heure de décollage, pour l'avion choisi sur la carte.
+  app.get("/api/aircraft/:hex/trace", (c) => {
+    const hex = c.req.param("hex").toLowerCase();
+    if (!/^~?[0-9a-f]{6}$/.test(hex)) return c.json({ error: "bad aircraft" }, 400);
+    c.header("Cache-Control", "no-store");
+    return c.json({ points: deps.history?.trace(hex) ?? [], tookOffAt: deps.history?.tookOffAt(hex) ?? null });
+  });
+
+  // Photo d'un avion, à la demande (clic sur l'avion) : adresse OACI à 6 chiffres hexadécimaux, immatriculation facultative.
+  app.get("/api/aircraft/:hex/photo", async (c) => {
+    const hex = c.req.param("hex").toLowerCase();
+    const reg = c.req.query("reg")?.toUpperCase() ?? null;
+    const type = c.req.query("type")?.trim() || null;
+    if (!/^[0-9a-f]{6}$/.test(hex) || (reg && !/^[A-Z0-9-]{2,10}$/.test(reg)) || (type && !/^[\w .\-/()]{2,60}$/.test(type))) return c.json({ error: "bad aircraft" }, 400);
+    if (!deps.photos) return c.json({ photo: null });
+    const photo = await deps.photos(hex, reg, type).catch(() => null);
+    c.header("Cache-Control", "private, max-age=86400");
+    return c.json({ photo });
   });
 
   if (deps.push) {
