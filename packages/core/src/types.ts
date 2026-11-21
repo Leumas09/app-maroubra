@@ -266,7 +266,7 @@ export interface LeadScore {
 }
 
 export interface LiveScore {
-  key: "temp" | "wind" | "waves" | "rain" | "overhead" | "sunrise" | "sunsky";
+  key: "temp" | "wind" | "waves" | "rain" | "overhead" | "sunrise";
   title: string;
   judge: string;
   target: string;

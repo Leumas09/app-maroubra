@@ -95,6 +95,7 @@ export async function archiveOutcome(table: ArchiveTable | null, o: OverheadOutc
     .catch((err) => console.error(JSON.stringify({ event: "archive_failed", error: String(err) })));
 }
 
+/** Ciel vu par satellite au lever : gardé pour un futur classement multi-bandes, pas encore jugé. */
 export async function archiveSunriseSky(table: ArchiveTable | null, s: { date: string; at: string; score: number; points: unknown }) {
   await table?.upsert({ partitionKey: `sunsat-${s.date.slice(0, 4)}`, rowKey: s.date, at: s.at, score: s.score, points: JSON.stringify(s.points) })
     .catch((err) => console.error(JSON.stringify({ event: "archive_failed", error: String(err) })));
@@ -160,7 +161,6 @@ export function archiveReader(table: ArchiveTable) {
       ...months.map((m) => () => part(`obs-buoy-${m}`, now, (r): ObsRow => ({ t: Number(r.rowKey), hs: n(r.hs) }), ["hs"])),
       ...months.map((m) => () => part(`ovh-${m}`, now, (r): OverheadOutcome => ({ hex: String(r.hex), callsign: (r.callsign as string) || null, at: String(r.at), inMin: Number(r.inMin), minKm: n(r.minKm), hit: r.hit === true }))),
       ...years.map((y) => () => part(`sunrise-${y}`, now, (r): SunriseRow => ({ date: r.rowKey, score: Number(r.score) }), ["score"])),
-      ...years.map((y) => () => part(`sunsat-${y}`, now, (r): SunriseRow => ({ date: r.rowKey, score: Number(r.score) }), ["score"])),
       ...years.map((y) => () => part(`vote-${y}`, now, (r): VoteRow => ({ date: String(r.date), value: Number(r.value) }), ["date", "value"])),
     ]);
     const live = new Set([...days.flatMap((d) => ["fc-openmeteo", "fc-yssy", "fc-marine", "fc-buoypt"].map((p) => `${p}-${d}`)), ...months.flatMap((m) => [`obs-yssy-${m}`, `obs-buoy-${m}`, `ovh-${m}`])]);
@@ -170,7 +170,7 @@ export function archiveReader(table: ArchiveTable) {
     const take = <T>(k: number) => groups.slice(i, (i += k)).flat() as T[];
     const fcMaroubra = take<FcRow>(D), fcAirport = take<FcRow>(D), fcMarine = take<FcRow>(D), fcBuoy = take<FcRow>(D);
     const metar = take<ObsRow>(M), buoy = take<ObsRow>(M), overhead = take<OverheadOutcome>(M);
-    const sunrise = take<SunriseRow>(Y), sunriseSky = take<SunriseRow>(Y), votes = take<VoteRow>(Y);
-    return { fcMaroubra, fcAirport, fcMarine, fcBuoy, metar, buoy, overhead, sunrise, sunriseSky, votes };
+    const sunrise = take<SunriseRow>(Y), votes = take<VoteRow>(Y);
+    return { fcMaroubra, fcAirport, fcMarine, fcBuoy, metar, buoy, overhead, sunrise, votes };
   };
 }

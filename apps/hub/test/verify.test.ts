@@ -182,6 +182,6 @@ describe("archive : écrire puis relire", () => {
     expect(d.metar[0].windKmh).toBeCloseTo(18.52, 1);
     expect(d.sunrise).toEqual([{ date: "2026-11-22", score: 7.5 }]);
     const v: Verification = verify(d, now.getTime() / 1000);
-    expect(v.scores).toHaveLength(7);
+    expect(v.scores).toHaveLength(6);
   });
 });

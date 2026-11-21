@@ -71,6 +71,13 @@
       "target": "beat persistence",
       "result": "CSI 0.35 at best vs 0.47 for persistence: not shown on screen",
       "pass": false
+    },
+    {
+      "name": "Cloud layers from satellite infrared alone",
+      "judge": "Sydney Airport ceilometer (METAR), 392 reports, 14 to 21 Nov 2026",
+      "target": "good enough to judge the sunrise score",
+      "result": "correlation 0.19 for low cloud, 0.44 for mid and high: not used as a judge",
+      "pass": false
     }
   ],
   "verifications": [

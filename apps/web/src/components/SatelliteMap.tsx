@@ -31,11 +31,10 @@ export function SatelliteMap({ s }: { s: Satellite }) {
 export function cloudText(s: Satellite): string {
   const o = s.overhead, r = s.within50km;
   if (!o || !r) return "No clear view from the satellite right now.";
-  const layer = (x: { low: number; mid: number; high: number }) => {
-    const top = Object.entries({ low: x.low, "mid-level": x.mid, high: x.high }).sort((a, b) => b[1] - a[1])[0];
-    return top[1] > 0 ? `mostly ${top[0]}` : "";
-  };
-  const over = o.total < 10 ? "Clear above Maroubra" : o.total > 80 ? `Cloud over Maroubra, ${layer(o)}` : `Some cloud over Maroubra (${o.total}%), ${layer(o)}`;
+  // L'infrarouge seul classe mal les étages (cirrus fins pris pour du bas) : on ne nomme que les
+  // sommets très froids, sûrement hauts (orages, enclumes, cirrus épais).
+  const high = (x: { high: number; total: number }) => (x.high >= 20 ? ", with high, cold cloud tops" : "");
+  const over = o.total < 10 ? "Clear above Maroubra" : o.total > 80 ? `Cloud over Maroubra${high(o)}` : `Some cloud over Maroubra (${o.total}%)${high(o)}`;
   const around = r.total < 10 ? "and clear for 50 km around" : `${r.total}% cloud within 50 km`;
   return `${over}, ${around}.`;
 }
