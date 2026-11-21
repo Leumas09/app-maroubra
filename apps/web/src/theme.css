@@ -95,8 +95,9 @@ h1, h2, h3 { font-weight: 400; font-synthesis: none; }
 .rail a[aria-current="page"] { color: var(--ink); box-shadow: inset 2px 0 0 var(--accent); }
 .rail a.alert { color: var(--alert); font-weight: 500; }
 main { min-width: 0; padding: 36px 44px 40px 20px; display: grid; gap: 22px; align-content: start; }
-.status { display: flex; gap: 10px; flex-wrap: wrap; }
+.status { position: fixed; top: 12px; right: 16px; z-index: 10; display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; pointer-events: none; }
 .status:empty { display: none; }
+.status .pill { box-shadow: 0 2px 10px oklch(20% 0.02 80 / 0.15); }
 
 /* Accueil */
 .home { display: grid; gap: 22px; }
@@ -203,6 +204,8 @@ th { color: var(--muted); font-weight: 500; }
   main { padding: 18px 16px 32px; }
   .home-head { grid-template-columns: minmax(0, 1fr); row-gap: 18px; }
   .home-foot { grid-template-columns: minmax(0, 1fr); row-gap: 24px; }
+  /* Place réservée pour la phrase du jour : l'arrivée des données ne fait pas sauter l'écran. */
+  .home-say h1 { min-height: calc(3 * 1.12em); }
 }
 @media (max-width: 639px) {
   .levels { padding: 14px 8px; column-gap: 4px; min-height: 210px; }

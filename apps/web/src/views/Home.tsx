@@ -158,7 +158,7 @@ export function Home({ now, sky, brief, beach, weather, buoy, marine, sunrise, s
         <CenteredScroll className="band chart-scroll" focus={focusOf(sky.tracks.sun, sky.tracks.moon)}>
           <HorizonChart sun={sky.tracks.sun} moon={sky.tracks.moon} planets={sky.tracks.planets} summary={skyLede(sky, w)} />
         </CenteredScroll>
-      ) : <div className="band" style={{ minHeight: 200 }} aria-busy="true" />}
+      ) : <div className="band" style={{ minHeight: 213 }} aria-busy="true" />}
 
       <div className="home-foot">
         <div className="panel levels" role="group" aria-label="Levels right now">
