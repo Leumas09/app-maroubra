@@ -24,7 +24,7 @@ const views = (process.env.VIEWS || "home,weather,beach,sea,sky,overhead,fire,ne
     await page.click("button[type=submit]");
     await page.waitForURL(`${run.base}/`);
     for (const v of views) {
-      if (size !== "tablet" && !["home", "beach", "sky", "overhead", "weather"].includes(v)) continue;
+      if (size !== "tablet" && !["home", "beach", "sky", "overhead", "weather", "sea", "track"].includes(v)) continue;
       await page.goto(`${run.base}/?at=${run.at}#${v}`, { waitUntil: "networkidle" });
       await page.waitForTimeout(400);
       await page.screenshot({ path: `${out}/${size}-${run.name}-${v}.png`, fullPage: size === "tablet" });

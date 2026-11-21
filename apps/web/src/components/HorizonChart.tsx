@@ -11,6 +11,12 @@ const x = (az: number) => ((((az - 180) % 360) + 360) % 360 / 360) * W;
 const y = (alt: number) => H - 24 - ((alt - ALT_MIN) / (ALT_MAX - ALT_MIN)) * (H - 40);
 const Y0 = y(0);
 
+/** Position horizontale (0 à 1) de l'astre à suivre : le Soleil le jour, sinon la Lune levée, sinon le nord. */
+export function focusOf(sun: TrackPoint[], moon: TrackPoint[]): number {
+  const body = sun[0]?.alt > -3 ? sun[0] : moon[0]?.alt > 0 ? moon[0] : null;
+  return body ? x(body.az) / W : 0.5;
+}
+
 /** Segments d'une trajectoire au-dessus de l'horizon, coupés au passage du nord (0°/360°). */
 function paths(points: TrackPoint[]): string[] {
   const out: string[] = [];

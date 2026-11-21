@@ -1,7 +1,8 @@
 // Accueil (direction B « Instrument ») : l'heure, une phrase, le ciel tracé, les niveaux et les prochains moments.
 import { useState } from "react";
 import type { Beach, Buoy, Marine, SourceEntry, SpaceWeather, Sunrise, Weather } from "@maroubra/core";
-import { HorizonChart } from "../components/HorizonChart";
+import { CenteredScroll } from "../components/CenteredScroll";
+import { focusOf, HorizonChart } from "../components/HorizonChart";
 import { compass, longDate, pct, time } from "../lib/format";
 import type { SkyModel } from "../lib/sky-model";
 import { skyLede } from "./Sky";
@@ -153,9 +154,11 @@ export function Home({ now, sky, brief, beach, weather, buoy, marine, sunrise, s
 
       {sky && <SunriseVote now={now} sunAlt={sky.sunAltNow} />}
 
-      <div className="band chart-scroll">
-        {sky ? <HorizonChart sun={sky.tracks.sun} moon={sky.tracks.moon} planets={sky.tracks.planets} summary={skyLede(sky)} /> : <div style={{ minHeight: 200 }} aria-busy="true" />}
-      </div>
+      {sky ? (
+        <CenteredScroll className="band chart-scroll" focus={focusOf(sky.tracks.sun, sky.tracks.moon)}>
+          <HorizonChart sun={sky.tracks.sun} moon={sky.tracks.moon} planets={sky.tracks.planets} summary={skyLede(sky)} />
+        </CenteredScroll>
+      ) : <div className="band" style={{ minHeight: 200 }} aria-busy="true" />}
 
       <div className="home-foot">
         <div className="panel levels" role="group" aria-label="Levels right now">

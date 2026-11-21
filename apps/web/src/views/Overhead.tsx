@@ -1,6 +1,7 @@
 import type { Aircraft, Flights, SourceEntry } from "@maroubra/core";
 import { useState } from "react";
 import { CardHead, Empty, Fresh } from "../components/bits";
+import { CenteredScroll } from "../components/CenteredScroll";
 import land from "../data/sydney-land.json";
 import { compass } from "../lib/format";
 
@@ -75,7 +76,7 @@ export function Overhead({ e }: { e: E<Flights> }) {
           {f.curfew ? " Airport curfew until 06:00: only exempt flights." : ""} {f.seenToday} flights over the suburb today.
         </p>
       </div>
-      <div className="card chart-scroll" style={{ padding: 12 }}><Map f={f} sel={s?.hex ?? null} pick={setSel} /></div>
+      <CenteredScroll className="card chart-scroll" focus={0.5}><Map f={f} sel={s?.hex ?? null} pick={setSel} /></CenteredScroll>
       <div className="grid">
         {s && (
           <div className="card">

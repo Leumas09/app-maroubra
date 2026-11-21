@@ -17,15 +17,19 @@ export type Row = { partitionKey: string; rowKey: string; [k: string]: unknown }
 /** Ce qu'une table doit savoir faire pour l'archive : écrire, et lire une partition. */
 export interface ArchiveTable {
   upsert(row: Row): Promise<void>;
-  partition(pk: string): Promise<Row[]>;
+  /** Lit une partition ; `select` limite les colonnes rapatriées. */
+  partition(pk: string, select?: string[]): Promise<Row[]>;
 }
 
 export function tableArchive(t: TableClient): ArchiveTable {
   return {
     upsert: async (row) => { await t.upsertEntity(row, "Replace"); },
-    partition: async (pk) => {
+    partition: async (pk, select) => {
       const out: Row[] = [];
-      for await (const e of t.listEntities({ queryOptions: { filter: `PartitionKey eq '${pk.replace(/'/g, "''")}'` } })) out.push(e as Row);
+      const filter = `PartitionKey eq '${pk.replace(/'/g, "''")}'`;
+      for await (const e of t.listEntities({ queryOptions: { filter, ...(select ? { select: ["PartitionKey", "RowKey", ...select] } : {}) } })) {
+        out.push({ ...(e as Row), partitionKey: e.partitionKey!, rowKey: e.rowKey! });
+      }
       return out;
     },
   };
@@ -103,16 +107,40 @@ const toFc = (r: Row): FcRow => ({
   pop: typeof r.pop === "number" && r.pop >= 0 ? r.pop : null, hs: n(r.hs),
 });
 
+const FC_COLS = ["issued", "valid", "temp", "wind", "pop", "hs"];
+
+/** Exécute des tâches avec au plus `limit` en parallèle. */
+async function pool<T>(tasks: (() => Promise<T>)[], limit = 8): Promise<T[]> {
+  const out: T[] = new Array(tasks.length);
+  let i = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, async () => {
+    while (i < tasks.length) { const k = i++; out[k] = await tasks[k](); }
+  }));
+  return out;
+}
+
+const toMetar = (r: Row): ObsRow => ({
+  t: Number(r.rowKey), temp: n(r.temp), windKmh: typeof r.windKt === "number" && r.windKt >= 0 ? ktToKmh(r.windKt) : null,
+  // Les lignes d'avant le 21/11/2026 n'ont pas de drapeau de pluie : on le relit dans le message brut.
+  rain: typeof r.rain === "number" ? r.rain === 1 : typeof r.raw === "string" ? metarRain(r.raw) : null,
+});
+
+/**
+ * Lecteur de l'archive pour la vérification. Les partitions de plus de deux jours ne changent plus :
+ * elles restent en cache, sous forme compacte (quelques dizaines d'octets par ligne).
+ */
 export function archiveReader(table: ArchiveTable) {
-  const cache = new Map<string, Row[]>();
+  const cache = new Map<string, unknown[]>();
   const frozen = (pk: string, now: Date) => {
     const tail = pk.split("-").at(-1)!;
-    const keep = tail.length === 8 ? dayKey(new Date(now.getTime() - 2 * 86400e3)) : tail.length === 6 ? monthKey(new Date(now.getTime() - 2 * 86400e3)) : "";
-    return tail.length !== 4 && tail < keep;
+    const old = new Date(now.getTime() - 2 * 86400e3);
+    if (tail.length === 8) return tail < dayKey(old);
+    if (tail.length === 6) return tail < monthKey(old);
+    return false;
   };
-  async function part(pk: string, now: Date): Promise<Row[]> {
-    if (cache.has(pk)) return cache.get(pk)!;
-    const rows = await table.partition(pk);
+  async function part<T>(pk: string, now: Date, map: (r: Row) => T, select?: string[]): Promise<T[]> {
+    if (cache.has(pk)) return cache.get(pk) as T[];
+    const rows = (await table.partition(pk, select)).map(map);
     if (frozen(pk, now)) cache.set(pk, rows);
     return rows;
   }
@@ -120,24 +148,23 @@ export function archiveReader(table: ArchiveTable) {
     const days = Array.from({ length: WINDOW_DAYS + 3 }, (_, i) => dayKey(new Date(now.getTime() - i * 86400e3)));
     const months = [...new Set(days.map((d) => d.slice(0, 6)))];
     const years = [...new Set(days.map((d) => d.slice(0, 4)))];
-    const many = async (prefix: string, keys: string[]) => (await Promise.all(keys.map((k) => part(`${prefix}-${k}`, now)))).flat();
-    // Gardé en cache seulement ce qui est utile, sous forme compacte.
-    const [om, yssy, marine, buoyPt, metar, buoy, ovh, sun, votes] = await Promise.all([
-      many("fc-openmeteo", days), many("fc-yssy", days), many("fc-marine", days), many("fc-buoypt", days),
-      many("obs-yssy", months), many("obs-buoy", months), many("ovh", months), many("sunrise", years), many("vote", years),
+    const fcs = (prefix: string) => days.map((d) => () => part(`${prefix}-${d}`, now, toFc, FC_COLS));
+    const groups = await pool<unknown[]>([
+      ...fcs("fc-openmeteo"), ...fcs("fc-yssy"), ...fcs("fc-marine"), ...fcs("fc-buoypt"),
+      ...months.map((m) => () => part(`obs-yssy-${m}`, now, toMetar, ["temp", "windKt", "rain", "raw"])),
+      ...months.map((m) => () => part(`obs-buoy-${m}`, now, (r): ObsRow => ({ t: Number(r.rowKey), hs: n(r.hs) }), ["hs"])),
+      ...months.map((m) => () => part(`ovh-${m}`, now, (r): OverheadOutcome => ({ hex: String(r.hex), callsign: (r.callsign as string) || null, at: String(r.at), inMin: Number(r.inMin), minKm: n(r.minKm), hit: r.hit === true }))),
+      ...years.map((y) => () => part(`sunrise-${y}`, now, (r): SunriseRow => ({ date: r.rowKey, score: Number(r.score) }), ["score"])),
+      ...years.map((y) => () => part(`vote-${y}`, now, (r): VoteRow => ({ date: String(r.date), value: Number(r.value) }), ["date", "value"])),
     ]);
-    for (const k of cache.keys()) if (!days.some((d) => k.endsWith(d)) && !months.some((m) => k.endsWith(m)) && !years.some((y) => k.endsWith(y))) cache.delete(k);
-    return {
-      fcMaroubra: om.map(toFc), fcAirport: yssy.map(toFc), fcMarine: marine.map(toFc), fcBuoy: buoyPt.map(toFc),
-      metar: metar.map((r): ObsRow => ({
-        t: Number(r.rowKey), temp: n(r.temp), windKmh: typeof r.windKt === "number" && r.windKt >= 0 ? ktToKmh(r.windKt) : null,
-        // Les lignes d'avant le 21/11/2026 n'ont pas de drapeau de pluie : on le relit dans le message brut.
-        rain: typeof r.rain === "number" ? r.rain === 1 : typeof r.raw === "string" ? metarRain(r.raw) : null,
-      })),
-      buoy: buoy.map((r): ObsRow => ({ t: Number(r.rowKey), hs: n(r.hs) })),
-      overhead: ovh.map((r) => ({ hex: String(r.hex), callsign: (r.callsign as string) || null, at: String(r.at), inMin: Number(r.inMin), minKm: n(r.minKm), hit: r.hit === true })),
-      sunrise: sun.map((r): SunriseRow => ({ date: r.rowKey, score: Number(r.score) })),
-      votes: votes.map((r): VoteRow => ({ date: String(r.date), value: Number(r.value) })),
-    };
+    const live = new Set([...days.flatMap((d) => ["fc-openmeteo", "fc-yssy", "fc-marine", "fc-buoypt"].map((p) => `${p}-${d}`)), ...months.flatMap((m) => [`obs-yssy-${m}`, `obs-buoy-${m}`, `ovh-${m}`])]);
+    for (const k of cache.keys()) if (!live.has(k)) cache.delete(k);
+    const D = days.length, M = months.length, Y = years.length;
+    let i = 0;
+    const take = <T>(k: number) => groups.slice(i, (i += k)).flat() as T[];
+    const fcMaroubra = take<FcRow>(D), fcAirport = take<FcRow>(D), fcMarine = take<FcRow>(D), fcBuoy = take<FcRow>(D);
+    const metar = take<ObsRow>(M), buoy = take<ObsRow>(M), overhead = take<OverheadOutcome>(M);
+    const sunrise = take<SunriseRow>(Y), votes = take<VoteRow>(Y);
+    return { fcMaroubra, fcAirport, fcMarine, fcBuoy, metar, buoy, overhead, sunrise, votes };
   };
 }

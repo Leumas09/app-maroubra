@@ -39,6 +39,15 @@ export class Push {
 
   async load() {
     if (!this.table) return;
+    // Moments déjà notifiés (aujourd'hui et hier) : un redémarrage du hub ne renvoie pas la même notification.
+    try {
+      const days = [sydneyClock(new Date()).day, sydneyClock(new Date(Date.now() - 86400e3)).day];
+      for (const d of days) {
+        for await (const e of this.table.listEntities<{ key: string }>({ queryOptions: { filter: `PartitionKey eq 'sent-${d}'` } })) this.sent.add(e.key);
+      }
+    } catch (err) {
+      console.error(JSON.stringify({ event: "push_load_failed", error: String(err) }));
+    }
     try {
       for await (const e of this.table.listEntities<{ json: string }>({ queryOptions: { filter: "PartitionKey eq 'sub'" } })) {
         const s = JSON.parse(e.json) as Sub;
@@ -79,6 +88,7 @@ export class Push {
     for (const m of moments) {
       if (this.sent.has(m.key)) continue;
       this.sent.add(m.key);
+      await this.table?.upsertEntity({ partitionKey: `sent-${day}`, rowKey: createHash("sha256").update(m.key).digest("hex").slice(0, 32), key: m.key }).catch(() => {});
       for (const [id, s] of this.subs) {
         if (!(s.prefs.kinds ?? DEFAULT_KINDS).includes(m.kind)) continue;
         if (s.prefs.quiet !== false && quietNow && m.priority > 1) continue;

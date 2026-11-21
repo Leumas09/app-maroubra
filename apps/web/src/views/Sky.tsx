@@ -1,6 +1,7 @@
 import type { Iss, SourceEntry, SpaceWeather, Sunrise } from "@maroubra/core";
 import { Fresh } from "../components/bits";
-import { HorizonChart } from "../components/HorizonChart";
+import { CenteredScroll } from "../components/CenteredScroll";
+import { focusOf, HorizonChart } from "../components/HorizonChart";
 import { auroraText } from "./FireAir";
 import { compass, duration, pct, shortDate, time } from "../lib/format";
 import type { SkyModel } from "../lib/sky-model";
@@ -29,9 +30,9 @@ export function Sky({ s, iss, space, sunrise }: { s: SkyModel; iss?: E<Iss>; spa
         <h1 id="sky-title" style={{ margin: "0 0 8px", fontSize: 15, color: "var(--muted)" }}>{s.isNight ? "Tonight over Maroubra" : "The sky over Maroubra"}</h1>
         <p className="lede">{skyLede(s)}</p>
       </div>
-      <div className="card chart-scroll" style={{ padding: 12 }}>
+      <CenteredScroll className="card chart-scroll" focus={focusOf(s.tracks.sun, s.tracks.moon)}>
         <HorizonChart sun={s.tracks.sun} moon={s.tracks.moon} planets={s.tracks.planets} summary={skyLede(s)} />
-      </div>
+      </CenteredScroll>
       <div className="grid">
         <div className="card">
           <h2>Sun</h2>
