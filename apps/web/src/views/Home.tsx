@@ -1,5 +1,6 @@
 // Accueil (direction B « Instrument ») : l'heure, une phrase, le ciel tracé, les niveaux et les prochains moments.
-import type { Beach, Buoy, Marine, SourceEntry, SpaceWeather, Sunrise, Weather } from "@maroubra/core";
+import type { Beach, BeachStatus, Buoy, Marine, SourceEntry, SpaceWeather, Sunrise, Weather } from "@maroubra/core";
+import { BeachStatusLine } from "../components/beach-status";
 import { HorizonChart } from "../components/HorizonChart";
 import { compass, longDate, pct, time } from "../lib/format";
 import type { SkyModel } from "../lib/sky-model";
@@ -41,6 +42,7 @@ interface Props {
   sky: SkyModel | null;
   brief: string | null;
   beach: E<Beach>;
+  beachStatus: E<BeachStatus>;
   weather: E<Weather>;
   buoy: E<Buoy>;
   marine: E<Marine>;
@@ -49,7 +51,7 @@ interface Props {
   moments: HomeMoment[];
 }
 
-export function Home({ now, sky, brief, beach, weather, buoy, marine, sunrise, space, moments }: Props) {
+export function Home({ now, sky, brief, beach, beachStatus, weather, buoy, marine, sunrise, space, moments }: Props) {
   const night = !!sky?.isNight;
   const b = beach?.data;
   const w = weather?.data;
@@ -60,7 +62,13 @@ export function Home({ now, sky, brief, beach, weather, buoy, marine, sunrise, s
   const sr = sunrise?.data;
   const sp = space?.data;
 
-  const beachLevel: Level = {
+  const closed = beachStatus?.data?.status === "closed";
+  const beachLevel: Level = closed ? {
+    label: "Beach",
+    value: "Closed",
+    sub: beachStatus?.data?.reason?.toLowerCase() ?? "lifeguards",
+    level: 0,
+  } : {
     label: "Beach",
     value: b ? (night && b.best ? b.best.score.toFixed(1) : b.score.toFixed(1)) : "n/a",
     sub: b?.best ? (night ? `best ${time(new Date(b.best.start * 1000))}` : `${b.best.score} at ${time(new Date(b.best.start * 1000))}`) : b?.label ?? "",
@@ -106,6 +114,8 @@ export function Home({ now, sky, brief, beach, weather, buoy, marine, sunrise, s
           {sub && <p>{sub}</p>}
         </div>
       </div>
+
+      <BeachStatusLine e={beachStatus} now={now} />
 
       <div className="band chart-scroll">
         {sky ? <HorizonChart sun={sky.tracks.sun} moon={sky.tracks.moon} planets={sky.tracks.planets} summary={skyLede(sky)} /> : <div style={{ minHeight: 200 }} aria-busy="true" />}

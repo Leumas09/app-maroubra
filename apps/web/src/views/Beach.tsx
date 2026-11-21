@@ -1,10 +1,12 @@
 // La plage : d'abord le statut officiel (sauveteurs, Beachwatch, Beachsafe), puis notre score expliqué,
 // le ruban horaire qui montre pourquoi le meilleur créneau est le meilleur, les instruments et les webcams.
-import type { Beach as B, BeachStatus, SourceEntry, SwimHour } from "@maroubra/core";
-import { BeachCompass, DayRibbon, FactorBars, Scale, ScoreDial, UV_ZONES, WATER_ZONES, scoreColor } from "../components/beach-viz";
+import type { Beach as B, BeachStatus, Buoy, Marine, SourceEntry, SwimHour } from "@maroubra/core";
+import { BeachCompass, DayRibbon, FactorBars, Scale, UV_ZONES, WATER_ZONES, scoreColor } from "../components/beach-viz";
+import { Flag, officialStatus } from "../components/beach-status";
 import { CardHead, Empty, Fresh } from "../components/bits";
 import { compass, time } from "../lib/format";
 import type { TideTable } from "../lib/tide";
+import { SeaSection } from "./Tide";
 
 type E<T> = (SourceEntry<T> & { stale: boolean; ageMin: number | null }) | null;
 
@@ -12,34 +14,13 @@ const CAMS_PAGE = "https://www.randwick.nsw.gov.au/facilities-and-recreation/exp
 const REPORT_PAGE = "https://www.randwick.nsw.gov.au/facilities-and-recreation/beaches-and-coast/lifeguard-reports";
 const sydneyHour = (d: Date) => Number(new Intl.DateTimeFormat("en-AU", { hour: "numeric", hourCycle: "h23", timeZone: "Australia/Sydney" }).format(d));
 const sydneyDay = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "Australia/Sydney" }).format(d);
-const hhmm = (s: string | null) => (s && /^\d{1,2}:\d{2}/.test(s) ? s.slice(0, 5) : s);
-
-/** Drapeaux rouge et jaune des plages surveillées, ou drapeau rouge de fermeture. */
-function Flag({ kind }: { kind: "patrol" | "closed" | "unknown" }) {
-  if (kind === "unknown") return <svg width="44" height="44" viewBox="0 0 44 44" aria-hidden="true"><circle cx="22" cy="22" r="18" fill="none" stroke="var(--muted)" strokeWidth="2.5" strokeDasharray="4 5" /></svg>;
-  return (
-    <svg width="44" height="44" viewBox="0 0 44 44" aria-hidden="true">
-      <line x1="9" y1="4" x2="9" y2="42" stroke="var(--ink-2)" strokeWidth="2.5" strokeLinecap="round" />
-      {kind === "patrol" ? (
-        <g><path d="M10 6 H38 V26 H10 Z" fill="oklch(82% 0.16 95)" /><path d="M10 6 H38 L10 26 Z" fill="oklch(58% 0.2 28)" /></g>
-      ) : <path d="M10 6 H38 L33 16 L38 26 H10 Z" fill="oklch(55% 0.2 28)" />}
-    </svg>
-  );
-}
 
 function OfficialStatus({ e, now }: { e: E<BeachStatus>; now: Date }) {
   const s = e?.data;
   const lg = s?.lifeguard;
-  const status = s?.status ?? "unknown";
-  const patrolledToday = s?.patrol?.today;
-  const early = sydneyHour(now) < 9;
-  const headline = status === "closed" ? `Closed${s?.reason ? `: ${s.reason.toLowerCase()}` : ""}`
-    : status === "open" ? "Open"
-      : lg && !lg.today ? (early ? "Today's lifeguard report isn't out yet" : "No lifeguard report today")
-        : e?.ok === false || !s ? "Official status unavailable" : "Status not published";
+  const { status, headline, patrol } = officialStatus(e, now);
   const sub = [
-    status === "open" && patrolledToday && s?.patrol?.start ? `Patrolled today ${hhmm(s.patrol.start)} to ${hhmm(s.patrol.end)}, swim between the red and yellow flags` : null,
-    status === "open" && patrolledToday === false ? "Not patrolled today" : null,
+    patrol,
     lg ? `Lifeguard report ${lg.today ? "" : `of ${new Date(lg.at).toLocaleDateString("en-AU", { weekday: "long", timeZone: "Australia/Sydney" })} `}at ${time(new Date(lg.at))}` : null,
   ].filter(Boolean).join(". ");
   const chip = (label: string, value: string, bad: boolean, good = false) => (
@@ -162,10 +143,13 @@ function verdict(b: B, daylight: boolean, closed: boolean): string {
   return { Great: "Great for a swim right now.", Good: "Good for a swim right now.", Fair: "Fair: swimmable, with care.", Poor: "Poor conditions for a swim.", "Stay out": "Stay out of the water." }[b.label];
 }
 
-export function Beach({ e, status, tide, now }: { e: E<B>; status: E<BeachStatus>; tide: TideTable | null; now: Date }) {
+interface Props { e: E<B>; status: E<BeachStatus>; tide: TideTable | null; now: Date; buoy: E<Buoy>; marine: E<Marine> }
+
+export function Beach({ e, status, tide, now, buoy, marine }: Props) {
   const b = e?.data;
   const official = <OfficialStatus e={status} now={now} />;
-  if (!b) return <section style={{ display: "grid", gap: 16 }}>{official}<div className="card"><CardHead title="Beach"><Fresh e={e} /></CardHead><Empty>Waiting for weather and sea data.</Empty></div></section>;
+  const sea = <SeaSection table={tide} now={now} buoy={buoy} marine={marine} />;
+  if (!b) return <section className="beach">{official}<div className="card"><CardHead title="Beach"><Fresh e={e} /></CardHead><Empty>Waiting for weather and sea data.</Empty></div>{sea}</section>;
   const hour = sydneyHour(now);
   const daylight = hour >= 7 && hour < 19;
   const closed = status?.data?.status === "closed";
@@ -177,29 +161,29 @@ export function Beach({ e, status, tide, now }: { e: E<B>; status: E<BeachStatus
       <h1 id="beach-title" className="sr-only">Maroubra Beach</h1>
       {official}
       <div className="beach-hero">
-        <div className="hero-dial">
-          <ScoreDial score={b.score} best={best?.score ?? null} label={b.label} dim={!daylight} />
-          <div className="dial-read">
-            {daylight ? <><span className="dial-num" style={{ color: scoreColor(b.score) }}>{b.score.toFixed(1)}</span><span className="dial-label">{b.label}</span></> : <span className="dial-label muted">Night</span>}
-          </div>
-          <div className="dial-cap">Swim score now, out of 10 <Fresh e={e} label="computed" /></div>
-        </div>
-        <div className="hero-why">
+        <div className="hero-top">
           <p className="lede">{verdict(b, daylight, closed)}</p>
-          {best && (
-            <div className="best">
-              <p className="best-when">
-                <span className="best-k">{bestToday ? "Best today" : "Best tomorrow"}</span>
-                {time(new Date(best.start * 1000))} to {time(new Date(best.end * 1000))}
-                <span className="best-score" style={{ background: scoreColor(best.score) }}>{best.score.toFixed(1)}</span>
-              </p>
-              <ul className="because">
-                {best.because.map((t) => <li key={t} className="plus">{t}</li>)}
-                {best.still.map((t) => <li key={t} className="minus">{t}</li>)}
-              </ul>
-            </div>
-          )}
+          <span className="swim-pill" title="Swim score now, computed from wind, swell, tide, UV, water and patrols; checked in the Track record">
+            <i style={{ background: daylight ? scoreColor(b.score) : "var(--muted)" }} aria-hidden="true" />
+            <span className="swim-pill-k">Swim score</span>
+            {daylight ? <strong>{b.score.toFixed(1)}</strong> : <strong>night</strong>}
+            {daylight && <span className="swim-pill-label">{b.label}</span>}
+          </span>
         </div>
+        {best && (
+          <div className="best">
+            <p className="best-when">
+              <span className="best-k">{bestToday ? "Best today" : "Best tomorrow"}</span>
+              {time(new Date(best.start * 1000))} to {time(new Date(best.end * 1000))}
+              <span className="best-score" style={{ background: scoreColor(best.score) }}>{best.score.toFixed(1)}</span>
+            </p>
+            <ul className="because">
+              {best.because.map((t) => <li key={t} className="plus">{t}</li>)}
+              {best.still.map((t) => <li key={t} className="minus">{t}</li>)}
+            </ul>
+          </div>
+        )}
+        <p className="note">Swim score <Fresh e={e} label="computed" /></p>
       </div>
       <div className="card chart-scroll" style={{ padding: "14px 14px 8px" }}>
         <DayRibbon b={b} now={now} tide={tide} />
@@ -219,6 +203,7 @@ export function Beach({ e, status, tide, now }: { e: E<B>; status: E<BeachStatus
         </div>
         <Cams photo={lg?.today ? lg.photo : null} photoAt={lg?.at ?? null} />
       </div>
+      {sea}
     </section>
   );
 }

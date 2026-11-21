@@ -10,12 +10,11 @@ import { News } from "./views/News";
 import { Overhead } from "./views/Overhead";
 import { Settings } from "./views/Settings";
 import { Sky } from "./views/Sky";
-import { Sea } from "./views/Tide";
 import { TrackRecord } from "./views/TrackRecord";
 import { Weather } from "./views/Weather";
 
-type View = "home" | "weather" | "beach" | "sea" | "sky" | "overhead" | "fire" | "news" | "track" | "settings";
-const VIEWS: View[] = ["home", "weather", "beach", "sea", "sky", "overhead", "fire", "news", "track", "settings"];
+type View = "home" | "weather" | "beach" | "sky" | "overhead" | "fire" | "news" | "track" | "settings";
+const VIEWS: View[] = ["home", "weather", "beach", "sky", "overhead", "fire", "news", "track", "settings"];
 
 /** `?at=2026-11-14T09:00:00Z` fige l'heure (captures et tests). */
 function startTime(): Date | null {
@@ -73,7 +72,8 @@ export function App() {
   useWakeLock(ambient);
 
   const night = sky?.isNight;
-  const fromHash = () => VIEWS.find((v) => location.hash === `#${v}`) ?? null;
+  // L'ancienne page Sea fait maintenant partie de Beach : les anciens liens #sea y mènent.
+  const fromHash = () => (location.hash === "#sea" ? "beach" : VIEWS.find((v) => location.hash === `#${v}`) ?? null);
   const [view, setView] = useState<View | null>(fromHash);
   useEffect(() => {
     const on = () => setView(fromHash());
@@ -124,7 +124,6 @@ export function App() {
           {link("home", night ? "Tonight" : "Today")}
           {link("weather", "Weather")}
           {link("beach", "Beach", beachStatus?.data?.status === "closed" ? { alert: "closed today" } : {})}
-          {link("sea", "Sea")}
           {link("sky", "Sky")}
           {link("overhead", "Overhead")}
           {link("fire", "Fire & smoke", urgentFire ? { alert: "check alerts" } : {})}
@@ -142,10 +141,9 @@ export function App() {
           {isDemo(snap) && <span className="pill miss">Sample data for testing, not live</span>}
           {snap && !connected && <span className="pill wait">Reconnecting…</span>}
         </div>
-        {current === "home" && <Home now={now} sky={sky} brief={brief?.text ?? null} beach={beach} weather={weather} buoy={buoy} marine={entry<Marine>(snap, "marine")} sunrise={entry<Sunrise>(snap, "sunrise")} space={entry<SpaceWeather>(snap, "space")} moments={moments} />}
+        {current === "home" && <Home now={now} sky={sky} brief={brief?.text ?? null} beach={beach} beachStatus={beachStatus} weather={weather} buoy={buoy} marine={entry<Marine>(snap, "marine")} sunrise={entry<Sunrise>(snap, "sunrise")} space={entry<SpaceWeather>(snap, "space")} moments={moments} />}
         {current === "weather" && <Weather e={weather} metar={entry<Metar>(snap, "metar")} air={air} night={!!night} />}
-        {current === "beach" && <Beach e={beach} status={beachStatus} tide={tide} now={now} />}
-        {current === "sea" && <Sea table={tide} now={now} buoy={buoy} marine={entry<Marine>(snap, "marine")} />}
+        {current === "beach" && <Beach e={beach} status={beachStatus} tide={tide} now={now} buoy={buoy} marine={entry<Marine>(snap, "marine")} />}
         {current === "sky" && (sky ? <Sky s={sky} iss={entry<Iss>(snap, "iss")} space={entry<SpaceWeather>(snap, "space")} sunrise={entry<Sunrise>(snap, "sunrise")} /> : <div className="card" style={{ minHeight: 320 }} aria-busy="true" />)}
         {current === "overhead" && <Overhead e={flights} night={!!night} demo={isDemo(snap)} />}
         {current === "fire" && <FireAir fires={fires} />}
