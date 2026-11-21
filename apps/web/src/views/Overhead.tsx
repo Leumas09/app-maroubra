@@ -1,10 +1,10 @@
 import type { Aircraft, AircraftPhoto, Flights, SourceEntry } from "@maroubra/core";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CardHead, Empty, Fresh } from "../components/bits";
-import { FlightMap, label, type Base } from "../components/FlightMap";
+import { FlightMap, HOME, label, type Base } from "../components/FlightMap";
 import { requestMotion, SkyFinder } from "../components/SkyFinder";
 import { compass } from "../lib/format";
-import { Motion } from "../lib/motion";
+import { distanceKm, Motion } from "../lib/motion";
 
 type E<T> = (SourceEntry<T> & { stale: boolean; ageMin: number | null }) | null;
 
@@ -45,6 +45,43 @@ function inkOn(hex: string): string {
   const [r, g, b] = [1, 3, 5].map((i) => lin(parseInt(hex.slice(i, i + 2), 16) / 255));
   const l = 0.2126 * r + 0.7152 * g + 0.0722 * b;
   return 1.05 / (l + 0.05) >= 4.5 ? "#fff" : "#141414";
+}
+
+/** Rayon du relevé de la maison (25 milles nautiques) : au-delà, la carte demande la zone visible. */
+const HOME_KM = 46;
+type View = { lat: number; lon: number; radiusKm: number };
+
+/**
+ * Avions de la zone visible quand la carte sort des environs de la maison : une requête toutes les 10 s
+ * tant que la vue ne bouge pas, et des traces construites ici à partir des positions successives.
+ */
+function useAreaAircraft(view: View | null, enabled: boolean): Aircraft[] {
+  const [list, setList] = useState<Aircraft[]>([]);
+  const trails = useRef(new Map<string, [number, number][]>());
+  const outside = !!view && distanceKm(view.lat, view.lon, HOME[0], HOME[1]) + view.radiusKm > HOME_KM;
+  useEffect(() => {
+    if (!view || !outside || !enabled) { setList([]); return; }
+    let live = true;
+    const load = async () => {
+      const r = await fetch(`/api/aircraft/area?lat=${view.lat.toFixed(3)}&lon=${view.lon.toFixed(3)}&r=${Math.ceil(view.radiusKm / 1.852)}`, { credentials: "same-origin" }).catch(() => null);
+      const j = r?.ok ? ((await r.json()) as { aircraft?: Aircraft[] }) : null;
+      if (!live || !j?.aircraft) return;
+      const seen = new Set<string>();
+      setList(j.aircraft.map((a) => {
+        seen.add(a.hex);
+        const t = trails.current.get(a.hex) ?? [];
+        const last = t.at(-1);
+        if (!last || last[0] !== a.lat || last[1] !== a.lon) t.push([a.lat, a.lon]);
+        trails.current.set(a.hex, t.slice(-60));
+        return { ...a, trail: trails.current.get(a.hex)! };
+      }));
+      for (const hex of trails.current.keys()) if (!seen.has(hex)) trails.current.delete(hex);
+    };
+    void load();
+    const id = setInterval(load, 10_000);
+    return () => { live = false; clearInterval(id); };
+  }, [view, outside, enabled]);
+  return list;
 }
 
 function AirlineBadge({ a }: { a: Aircraft }) {
@@ -130,17 +167,33 @@ export function Overhead({ e, night, demo }: { e: E<Flights>; night: boolean; de
   const [chosen, setChosen] = useState<Base>(() => (store.get("mb.mapBase") as Base | null) ?? "map");
   const setBase = (b: Base) => { setChosen(b); store.set("mb.mapBase", b); };
   // Données de démonstration : hors ligne, donc sans tuiles.
-  const base: Base = demo ? "plain" : chosen;
+  // « Plain » est notre trait de côte local, limité au secteur de Sydney : réservé à la démonstration hors ligne.
+  const base: Base = demo ? "plain" : chosen === "plain" ? "map" : chosen;
   const calm = useMemo(() => matchMedia("(prefers-reduced-motion: reduce)").matches, []);
 
+  // Zone visible, arrondie (0,05° et 5 km) pour ne pas relancer de requête à chaque petit déplacement.
+  const [view, setView] = useState<View | null>(null);
+  const viewKey = useRef("");
+  const onView = (v: View) => {
+    const r = { lat: Math.round(v.lat * 20) / 20, lon: Math.round(v.lon * 20) / 20, radiusKm: Math.ceil(v.radiusKm / 5) * 5 };
+    const k = `${r.lat}|${r.lon}|${r.radiusKm}`;
+    if (k !== viewKey.current) { viewKey.current = k; setView(r); }
+  };
+  const area = useAreaAircraft(view, !demo);
+
   const motion = useMemo(() => new Motion(), []);
-  const aircraft = f?.aircraft ?? NONE;
+  const home = f?.aircraft ?? NONE;
+  const aircraft = useMemo(() => {
+    if (!area.length) return home;
+    const mine = new Set(home.map((a) => a.hex));
+    return [...home, ...area.filter((a) => !mine.has(a.hex))];
+  }, [home, area]);
   useEffect(() => { motion.update(aircraft, Date.now()); }, [aircraft, motion]);
 
   if (!f) return <section className="card"><CardHead title="Overhead"><Fresh e={e} /></CardHead><Empty>Waiting for aircraft positions.</Empty></section>;
   const airborne = f.aircraft.filter((a) => !a.onGround);
   const emergencies = f.aircraft.filter((a) => a.emergency);
-  const s = f.aircraft.find((a) => a.hex === sel) ?? emergencies[0] ?? airborne.find((a) => a.overhead) ?? airborne[0];
+  const s = aircraft.find((a) => a.hex === sel) ?? emergencies[0] ?? airborne.find((a) => a.overhead) ?? airborne[0];
   const pick = (hex: string) => { setSel(hex); if (hex !== s?.hex) setFollow(false); };
   const openSky = () => { void requestMotion(); setSky(true); };
 
@@ -164,7 +217,7 @@ export function Overhead({ e, night, demo }: { e: E<Flights>; night: boolean; de
       <div className="card chart-scroll map-panel">
         <div className="map-tools">
           <div className="seg" role="group" aria-label="Map background">
-            {(["map", "satellite", "plain"] as Base[]).map((b) => (
+            {((demo ? ["map", "satellite", "plain"] : ["map", "satellite"]) as Base[]).map((b) => (
               <button key={b} aria-pressed={base === b} onClick={() => setBase(b)} disabled={demo && b !== "plain"}>{b === "map" ? "Map" : b === "satellite" ? "Satellite" : "Plain"}</button>
             ))}
           </div>
@@ -173,8 +226,8 @@ export function Overhead({ e, night, demo }: { e: E<Flights>; night: boolean; de
             <button className="btn small" onClick={openSky}>Sky finder</button>
           </div>
         </div>
-        <FlightMap aircraft={f.aircraft} motion={motion} selected={s?.hex ?? null} follow={follow} base={base} night={night} calm={calm}
-          onPick={pick} onStopFollow={() => setFollow(false)} homeTick={homeTick} source={f.source ?? "adsb.lol"} />
+        <FlightMap aircraft={aircraft} motion={motion} selected={s?.hex ?? null} follow={follow} base={base} night={night} calm={calm}
+          onPick={pick} onStopFollow={() => setFollow(false)} homeTick={homeTick} source={f.source ?? "adsb.lol"} onView={onView} />
       </div>
       <div className="grid">
         {s && <Selected a={s} follow={follow} setFollow={setFollow} openSky={() => { setSel(s.hex); openSky(); }} />}

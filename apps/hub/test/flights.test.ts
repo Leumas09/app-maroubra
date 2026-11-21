@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { moments } from "../src/derive/moments";
 import { okPhotoUrl, parsePhoto, photoFinder } from "../src/photos";
 import { airlineOf } from "../src/sources/airlines";
-import { aircraftList, currentLeg, emergencyOf, flightsCollector, normalize, type RawAc } from "../src/sources/flights";
+import { aircraftList, areaFinder, currentLeg, emergencyOf, flightsCollector, normalize, type RawAc } from "../src/sources/flights";
 import type { Config } from "../src/config";
 import { createApp } from "../src/server";
 import { Store } from "../src/store";
@@ -164,5 +164,32 @@ describe("collecteurs dérivés en attente d'une entrée", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("avions de la zone visible sur la carte", () => {
+  const fi = JSON.parse(readFileSync(new URL("./fixtures/adsbfi-point-2026-11-20.json", import.meta.url), "utf8"));
+  it("arrondit la zone, borne le rayon à 250 NM et partage le cache quelques secondes", async () => {
+    const asked: string[] = [];
+    const find = areaFinder(new Map(), async (u) => { asked.push(u); return fi; });
+    expect(await find(-33.512, 150.987, 37)).toHaveLength(6);
+    await find(-33.509, 150.99, 38); // même zone une fois arrondie
+    await find(-30, 150, 900);
+    expect(asked).toEqual([
+      "https://opendata.adsb.fi/api/v2/lat/-33.5/lon/151/dist/40",
+      "https://opendata.adsb.fi/api/v2/lat/-30/lon/150/dist/250",
+    ]);
+  });
+  it("route /api/aircraft/area : session exigée, zone validée", async () => {
+    const cfg: Config = { port: 0, staticDir: "/nonexistent", password: "test-family-password", sessionSecret: "s", secureCookies: false, version: "v1", offline: true, foundry: { deployment: "x" }, vapid: { subject: "mailto:x@y" } };
+    const app = createApp(cfg, new Store(), { area: async (lat, lon, r) => normalize(aircraftList(fi), new Map(), new Map()).slice(0, Math.round(r / 100)) });
+    expect((await app.request("/api/aircraft/area?lat=-33&lon=151&r=200")).status).toBe(401);
+    const r = await app.request("/login", { method: "POST", body: new URLSearchParams({ password: "test-family-password", next: "/" }), headers: { "content-type": "application/x-www-form-urlencoded" } });
+    const headers = { cookie: `mb_s=${r.headers.get("set-cookie")!.match(/mb_s=([^;]+)/)![1]}` };
+    expect((await app.request("/api/aircraft/area?lat=x&lon=151&r=20", { headers })).status).toBe(400);
+    expect((await app.request("/api/aircraft/area?lat=-33&lon=151&r=0", { headers })).status).toBe(400);
+    expect((await (await app.request("/api/aircraft/area?lat=-33&lon=151&r=200", { headers })).json()).aircraft).toHaveLength(2);
+    // la version servie accompagne l'état, pour le rechargement automatique de l'app
+    expect((await (await app.request("/api/state", { headers })).json()).build).toBe("v1");
   });
 });

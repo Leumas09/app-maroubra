@@ -9,9 +9,19 @@ export function useLive(): { snap: Snapshot | null; connected: boolean } {
   useEffect(() => {
     let es: EventSource | null = null;
     let closed = false;
+    let build: string | null = null;
     const open = () => {
       es = new EventSource("/api/stream");
-      es.addEventListener("snapshot", (e) => { setSnap(JSON.parse((e as MessageEvent).data)); setConnected(true); });
+      es.addEventListener("snapshot", (e) => {
+        const next = JSON.parse((e as MessageEvent).data) as Snapshot & { build?: string };
+        // Nouvelle version mise en production : l'écran se recharge seul pour la prendre.
+        if (next.build && next.build !== "dev") {
+          if (build && build !== next.build) { location.reload(); return; }
+          build = next.build;
+        }
+        setSnap(next);
+        setConnected(true);
+      });
       es.addEventListener("patch", (e) => {
         const { id, entry, version } = JSON.parse((e as MessageEvent).data) as { id: string; entry: SourceEntry; version: number };
         setSnap((s) => (s ? { version, sources: { ...s.sources, [id]: entry } } : s));

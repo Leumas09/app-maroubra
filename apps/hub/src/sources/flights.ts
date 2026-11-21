@@ -16,6 +16,18 @@ const FALLBACK_EVERY_MS = 5 * 60e3;
 const ADSB_FI = `https://opendata.adsb.fi/api/v2/lat/${SITE.lat}/lon/${SITE.lon}/dist/${RADIUS_NM}`;
 const ADSB_LOL = `https://api.adsb.lol/v2/point/${SITE.lat}/${SITE.lon}/${RADIUS_NM}`;
 
+/**
+ * adsb.fi autorise une requête par seconde : toutes nos requêtes (relevé de la maison et zones demandées
+ * par la carte) passent par ce guichet, qui les espace d'au moins 1,1 s.
+ */
+let fiNext = 0;
+async function fetchFi(url: string): Promise<{ ac?: RawAc[]; aircraft?: RawAc[] }> {
+  const wait = Math.max(0, fiNext - Date.now());
+  fiNext = Math.max(Date.now(), fiNext) + 1100;
+  if (wait) await new Promise((r) => setTimeout(r, wait));
+  return fetchJson(url);
+}
+
 /** Les deux agrégateurs servent le format readsb : liste sous « aircraft » (adsb.fi) ou « ac » (adsb.lol). */
 export const aircraftList = (j: { ac?: RawAc[]; aircraft?: RawAc[] }): RawAc[] => j.aircraft ?? j.ac ?? [];
 
@@ -146,8 +158,33 @@ export function normalize(raw: RawAc[], routes: Map<string, RawRoute>, trails: M
     .sort((a, b) => a.distKm - b.distKm);
 }
 
-export function flightsCollector(): Collector<Flights> {
-  const routes = new Map<string, RawRoute & { at: number }>();
+export type RouteCache = Map<string, RawRoute & { at: number }>;
+
+/** Rayon maximal d'une zone demandée par la carte (limite d'adsb.fi : 250 milles nautiques). */
+export const AREA_MAX_NM = 250;
+const AREA_TTL_MS = 8_000;
+
+/**
+ * Avions d'une zone quelconque, quand on déplace ou dézoome la carte loin de la maison.
+ * Centre arrondi à 0,05° et rayon à 5 NM pour partager le cache entre écrans ; routes déjà connues seulement.
+ */
+export function areaFinder(routes: RouteCache, get = fetchFi) {
+  const cache = new Map<string, { at: number; list: Promise<Aircraft[]> }>();
+  return async (lat: number, lon: number, nm: number): Promise<Aircraft[]> => {
+    const la = Math.round(lat * 20) / 20, lo = Math.round(lon * 20) / 20;
+    const r = Math.min(AREA_MAX_NM, Math.max(5, Math.ceil(nm / 5) * 5));
+    const key = `${la}|${lo}|${r}`;
+    const hit = cache.get(key);
+    if (hit && Date.now() - hit.at < AREA_TTL_MS) return hit.list;
+    for (const [k, v] of cache) if (Date.now() - v.at >= AREA_TTL_MS) cache.delete(k);
+    const list = get(`https://opendata.adsb.fi/api/v2/lat/${la}/lon/${lo}/dist/${r}`).then((j) => normalize(aircraftList(j), routes, new Map()));
+    cache.set(key, { at: Date.now(), list });
+    list.catch(() => cache.delete(key));
+    return list;
+  };
+}
+
+export function flightsCollector(routes: RouteCache = new Map()): Collector<Flights> {
   const trails = new Map<string, [number, number][]>();
   const seen = new Map<string, string>(); // hex vu aujourd'hui (jour de Sydney)
   let lastRoutes = 0;
@@ -160,7 +197,7 @@ export function flightsCollector(): Collector<Flights> {
       let raw: RawAc[];
       let source = "adsb.fi";
       try {
-        raw = aircraftList(await fetchJson(ADSB_FI));
+        raw = aircraftList(await fetchFi(ADSB_FI));
       } catch (err) {
         if (now.getTime() - lastFallback < FALLBACK_EVERY_MS) throw err;
         lastFallback = now.getTime();
