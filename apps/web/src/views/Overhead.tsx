@@ -9,6 +9,9 @@ import { distanceKm, Motion } from "../lib/motion";
 type E<T> = (SourceEntry<T> & { stale: boolean; ageMin: number | null }) | null;
 
 const ft = (a: Aircraft) => (a.onGround ? "on ground" : a.altFt != null ? `${a.altFt.toLocaleString("en-AU")} ft` : "n/a");
+/** Altitude en pieds puis en mètres (fiche de l'avion). */
+const ftM = (a: Aircraft) => (a.onGround || a.altFt == null ? ft(a) : `${ft(a)} (${Math.round(a.altFt * 0.3048).toLocaleString("en-AU")} m)`);
+const hm = (ms: number) => new Intl.DateTimeFormat("en-AU", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "Australia/Sydney" }).format(ms);
 const NONE: Aircraft[] = [];
 const nf = (n: number) => n.toLocaleString("en-AU");
 
@@ -22,21 +25,41 @@ const store = {
 
 // Photos déjà demandées pendant la session (une requête par avion).
 const photos = new Map<string, Promise<AircraftPhoto | null>>();
-function usePhoto(hex: string, reg: string | null): AircraftPhoto | null | undefined {
+function usePhoto(hex: string, reg: string | null, typeName: string | null): AircraftPhoto | null | undefined {
   const [p, setP] = useState<AircraftPhoto | null | undefined>(undefined);
   useEffect(() => {
     let live = true;
     setP(undefined);
     if (!/^[0-9a-f]{6}$/i.test(hex)) { setP(null); return; }
-    const key = `${hex}|${reg ?? ""}`;
+    const key = `${hex}|${reg ?? ""}|${typeName ?? ""}`;
     if (!photos.has(key)) {
-      photos.set(key, fetch(`/api/aircraft/${hex}/photo${reg ? `?reg=${encodeURIComponent(reg)}` : ""}`, { credentials: "same-origin" })
+      const q = new URLSearchParams({ ...(reg ? { reg } : {}), ...(typeName ? { type: typeName } : {}) });
+      photos.set(key, fetch(`/api/aircraft/${hex}/photo?${q}`, { credentials: "same-origin" })
         .then((r) => (r.ok ? r.json() : { photo: null })).then((j: { photo: AircraftPhoto | null }) => j.photo).catch(() => null));
     }
     photos.get(key)!.then((x) => live && setP(x));
     return () => { live = false; };
-  }, [hex, reg]);
+  }, [hex, reg, typeName]);
   return p;
+}
+
+/** Trace complète de l'avion choisi (jusqu'à 3 h, enregistrée par le hub), relue toutes les 15 s. */
+function useTrace(hex: string | null, enabled: boolean): { points: [number, number][]; tookOffAt: number | null } | null {
+  const [t, setT] = useState<{ points: [number, number][]; tookOffAt: number | null } | null>(null);
+  useEffect(() => {
+    setT(null);
+    if (!hex || !enabled) return;
+    let live = true;
+    const load = () => fetch(`/api/aircraft/${encodeURIComponent(hex)}/trace`, { credentials: "same-origin" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: { points: [number, number, number, number | null][]; tookOffAt: number | null } | null) => {
+        if (live && j) setT({ points: j.points.map((p) => [p[1], p[2]]), tookOffAt: j.tookOffAt });
+      }).catch(() => {});
+    void load();
+    const id = setInterval(load, 15_000);
+    return () => { live = false; clearInterval(id); };
+  }, [hex, enabled]);
+  return t;
 }
 
 /** Texte blanc ou presque noir sur la couleur de la compagnie, selon ce qui contraste le mieux (WCAG). */
@@ -90,19 +113,25 @@ function AirlineBadge({ a }: { a: Aircraft }) {
 }
 
 function Photo({ a }: { a: Aircraft }) {
-  const p = usePhoto(a.hex, a.reg);
+  const typeName = a.desc ? titleCase(a.desc) : a.type;
+  const p = usePhoto(a.hex, a.reg, typeName);
   if (p === null) return null;
+  const similar = p?.kind === "type";
   return (
     <figure className="ac-photo">
       <div className="ac-photo-frame" style={{ aspectRatio: p ? `${p.width} / ${p.height}` : "3 / 2" }}>
-        {p && <img src={p.src} alt={`${a.reg ?? label(a)}, ${a.desc ? titleCase(a.desc) : a.type ?? "aircraft"}`} referrerPolicy="no-referrer" loading="lazy" />}
+        {p && <img src={p.src} alt={similar ? `A ${typeName ?? "similar aircraft"}, not this one` : `${a.reg ?? label(a)}, ${typeName ?? "aircraft"}`} referrerPolicy="no-referrer" loading="lazy" />}
+        {similar && <span className="ac-photo-tag">Similar aircraft</span>}
       </div>
-      {p && <figcaption>Photo <a href={p.link} target="_blank" rel="noopener noreferrer">{p.photographer} / Planespotters</a></figcaption>}
+      {p && (similar
+        ? <figcaption>A {typeName}, not this aircraft. Photo <a href={p.link} target="_blank" rel="noopener noreferrer">{p.site}</a></figcaption>
+        : <figcaption>Photo <a href={p.link} target="_blank" rel="noopener noreferrer">{p.photographer === p.site ? p.site : `${p.photographer} / ${p.site ?? "Planespotters"}`}</a></figcaption>)}
     </figure>
   );
 }
 
-function Selected({ a, follow, setFollow, openSky }: { a: Aircraft; follow: boolean; setFollow: (v: boolean) => void; openSky: () => void }) {
+function Selected({ a, tookOffAt, follow, setFollow, openSky }: { a: Aircraft; tookOffAt: number | null; follow: boolean; setFollow: (v: boolean) => void; openSky: () => void }) {
+  const off = tookOffAt ?? a.tookOffAt ?? null;
   const trend = a.vrate == null || a.onGround ? "" : a.vrate > 300 ? `, climbing ${nf(Math.round(a.vrate / 50) * 50)} ft/min` : a.vrate < -300 ? `, descending ${nf(Math.round(-a.vrate / 50) * 50)} ft/min` : ", level";
   const hoursLeft = a.progress && a.speedKt && a.speedKt >= 100 ? a.progress.leftKm / (a.speedKt * 1.852) : null;
   const sub = [a.airline?.name ?? a.operator, a.flightNo && a.callsign ? `callsign ${a.callsign}` : null].filter(Boolean).join(", ");
@@ -120,8 +149,8 @@ function Selected({ a, follow, setFollow, openSky }: { a: Aircraft; follow: bool
       {a.route && (
         <div className="leg">
           <div className="leg-ends">
-            <div><div className="big">{a.route.from?.iata ?? "?"}</div><div className="muted">{a.route.from?.location}</div></div>
-            <div style={{ textAlign: "right" }}><div className="big">{a.route.to?.iata ?? "?"}</div><div className="muted">{a.route.to?.location}</div></div>
+            <div><div className="leg-k">From</div><div className="big">{a.route.from?.iata ?? "?"}</div><div className="muted">{a.route.from?.location}</div>{off && <div className="leg-time">Took off {hm(off)}</div>}</div>
+            <div style={{ textAlign: "right" }}><div className="leg-k">To</div><div className="big">{a.route.to?.iata ?? "?"}</div><div className="muted">{a.route.to?.location}</div></div>
           </div>
           {a.progress && (
             <>
@@ -138,11 +167,12 @@ function Selected({ a, follow, setFollow, openSky }: { a: Aircraft; follow: bool
           {a.route.codes.split("-").length > 2 && <p className="muted leg-note">Full route {a.route.codes.replaceAll("-", " to ")}.</p>}
         </div>
       )}
+      {!a.route && <p className="muted leg-note">Route not known for this flight{off ? `. Took off at ${hm(off)}` : ""}.</p>}
       <dl className="kv">
         <dt>Aircraft</dt><dd>{a.desc ? titleCase(a.desc) : a.type ?? "n/a"}</dd>
         {a.reg && <><dt>Registration</dt><dd>{a.reg}{a.built ? `, built ${a.built}` : ""}</dd></>}
         {a.operator && a.airline && !a.operator.toLowerCase().includes(a.airline.name.toLowerCase().split(" ")[0]) && <><dt>Operator</dt><dd>{titleCase(a.operator)}</dd></>}
-        <dt>Altitude</dt><dd>{ft(a)}{trend}</dd>
+        <dt>Altitude</dt><dd>{ftM(a)}{trend}</dd>
         <dt>Speed</dt><dd>{a.speedKt != null ? `${nf(Math.round(a.speedKt * 1.852))} km/h (${Math.round(a.speedKt)} kt)` : "n/a"}</dd>
         {a.track != null && <><dt>Heading</dt><dd>{compass(a.track)} ({Math.round(a.track)}°)</dd></>}
         <dt>Squawk</dt><dd className={a.emergency ? "alert-text" : undefined}>{a.squawk ?? "n/a"}{a.emergency ? `, ${a.emergency.toLowerCase()}` : ""}</dd>
@@ -190,10 +220,12 @@ export function Overhead({ e, night, demo }: { e: E<Flights>; night: boolean; de
   }, [home, area]);
   useEffect(() => { motion.update(aircraft, Date.now()); }, [aircraft, motion]);
 
-  if (!f) return <section className="card"><CardHead title="Overhead"><Fresh e={e} /></CardHead><Empty>Waiting for aircraft positions.</Empty></section>;
-  const airborne = f.aircraft.filter((a) => !a.onGround);
-  const emergencies = f.aircraft.filter((a) => a.emergency);
+  const airborne = home.filter((a) => !a.onGround);
+  const emergencies = home.filter((a) => a.emergency);
   const s = aircraft.find((a) => a.hex === sel) ?? emergencies[0] ?? airborne.find((a) => a.overhead) ?? airborne[0];
+  const trace = useTrace(s?.hex ?? null, true);
+
+  if (!f) return <section className="card"><CardHead title="Overhead"><Fresh e={e} /></CardHead><Empty>Waiting for aircraft positions.</Empty></section>;
   const pick = (hex: string) => { setSel(hex); if (hex !== s?.hex) setFollow(false); };
   const openSky = () => { void requestMotion(); setSky(true); };
 
@@ -214,6 +246,7 @@ export function Overhead({ e, night, demo }: { e: E<Flights>; night: boolean; de
           <button className="link-btn" onClick={() => { pick(a.hex); setFollow(true); }}>Show on map</button>
         </div>
       ))}
+      <div className="ov-main">
       <div className="card chart-scroll map-panel">
         <div className="map-tools">
           <div className="seg" role="group" aria-label="Map background">
@@ -227,12 +260,12 @@ export function Overhead({ e, night, demo }: { e: E<Flights>; night: boolean; de
           </div>
         </div>
         <FlightMap aircraft={aircraft} motion={motion} selected={s?.hex ?? null} follow={follow} base={base} night={night} calm={calm}
-          onPick={pick} onStopFollow={() => setFollow(false)} homeTick={homeTick} source={f.source ?? "adsb.lol"} onView={onView} />
+          onPick={pick} onStopFollow={() => setFollow(false)} homeTick={homeTick} source={f.source ?? "adsb.lol"} onView={onView} selectedTrace={trace?.points ?? null} />
       </div>
-      <div className="grid">
-        {s && <Selected a={s} follow={follow} setFollow={setFollow} openSky={() => { setSel(s.hex); openSky(); }} />}
-        <div className="card">
-          <h2>Nearest first</h2>
+        {s && <Selected a={s} tookOffAt={trace?.tookOffAt ?? null} follow={follow} setFollow={setFollow} openSky={() => { setSel(s.hex); openSky(); }} />}
+      </div>
+      <div className="card nearby">
+          <h2>Around Maroubra, nearest first</h2>
           <ul className="list planes">
             {airborne.slice(0, 10).map((a) => (
               <li key={a.hex}>
@@ -244,7 +277,6 @@ export function Overhead({ e, night, demo }: { e: E<Flights>; night: boolean; de
               </li>
             ))}
           </ul>
-        </div>
       </div>
       {sky && <SkyFinder aircraft={f.aircraft} motion={motion} focus={s?.hex ?? null} onFocus={setSel} onClose={() => setSky(false)} />}
     </section>

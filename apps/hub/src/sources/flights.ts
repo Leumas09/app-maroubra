@@ -1,6 +1,6 @@
 // Avions autour de Maroubra : positions ADS-B d'adsb.fi (open data, une requête par seconde autorisée),
-// adsb.lol en secours, et routes du service « routeset » d'adsb.lol. adsb.lol limite l'accès sans clé
-// à 500 appels par jour : secours au plus toutes les 5 min, routes au plus toutes les 10 min (432 par jour au pire).
+// adsb.lol en secours (500 appels par jour sans clé : au plus toutes les 5 min), routes d'adsbdb.com.
+// Un grand relevé de 250 NM toutes les 30 s alimente l'historique des traces (history.ts).
 // On déduit le mode de pistes de Sydney, le couvre-feu et les survols imminents.
 import type { Aircraft, Airport, Flights } from "@maroubra/core";
 import { airlineOf } from "./airlines";
@@ -8,10 +8,13 @@ import { SITE } from "../config";
 import { bearingDeg, destination, distanceKm } from "../geo";
 import { fetchJson } from "../http";
 import type { Collector } from "../collector";
+import { FlightHistory } from "./history";
+import { routeLookup, type RouteCache } from "./routes";
 
 const YSSY = { lat: -33.9461, lon: 151.1772 };
 const RADIUS_NM = 25;
-const ROUTES_EVERY_MS = 10 * 60e3;
+const WIDE_EVERY_MS = 30_000;
+const WIDE_NM = 250;
 const FALLBACK_EVERY_MS = 5 * 60e3;
 const ADSB_FI = `https://opendata.adsb.fi/api/v2/lat/${SITE.lat}/lon/${SITE.lon}/dist/${RADIUS_NM}`;
 const ADSB_LOL = `https://api.adsb.lol/v2/point/${SITE.lat}/${SITE.lon}/${RADIUS_NM}`;
@@ -120,12 +123,12 @@ export function isCurfew(now: Date): boolean {
 const airport = (a?: RawAirport): Airport | undefined =>
   a ? { iata: a.iata, icao: a.icao, name: a.name, location: a.location, ...(hasPos(a) ? { lat: a.lat, lon: a.lon } : {}) } : undefined;
 
-export function normalize(raw: RawAc[], routes: Map<string, RawRoute>, trails: Map<string, [number, number][]>, now = Date.now()): Aircraft[] {
+export function normalize(raw: RawAc[], routes: Map<string, object>, trails: Map<string, [number, number][]>, now = Date.now(), history?: FlightHistory): Aircraft[] {
   return raw
     .filter((r) => r.lat != null && r.lon != null && (r.seen_pos ?? 0) < 60)
     .map((r) => {
       const cs = r.flight?.trim() || null;
-      const route = cs ? routes.get(cs) : undefined;
+      const route = cs ? (routes.get(cs) as RawRoute | undefined) : undefined;
       const onGround = r.alt_baro === "ground";
       const lat = r.lat!, lon = r.lon!;
       const speedKt = r.gs ?? null;
@@ -151,14 +154,20 @@ export function normalize(raw: RawAc[], routes: Map<string, RawRoute>, trails: M
           : null,
         progress: leg?.progress ?? null,
         overhead: onGround ? null : predictOverhead({ lat, lon, track: r.track ?? null, speedKt }),
-        trail: trails.get(r.hex) ?? [],
+        trail: history ? history.recent(r.hex, now) : trails.get(r.hex) ?? [],
+        tookOffAt: history?.tookOffAt(r.hex) ?? null,
       };
       return ac;
     })
     .sort((a, b) => a.distKm - b.distKm);
 }
 
-export type RouteCache = Map<string, RawRoute & { at: number }>;
+/** État partagé : routes, historique des traces et recherche de routes. */
+export interface FlightShared { routes: RouteCache; history: FlightHistory; lookup: (callsigns: string[], max?: number) => string[] }
+export function flightShared(): FlightShared {
+  const routes: RouteCache = new Map();
+  return { routes, history: new FlightHistory(), lookup: routeLookup(routes) };
+}
 
 /** Rayon maximal d'une zone demandée par la carte (limite d'adsb.fi : 250 milles nautiques). */
 export const AREA_MAX_NM = 250;
@@ -166,9 +175,9 @@ const AREA_TTL_MS = 8_000;
 
 /**
  * Avions d'une zone quelconque, quand on déplace ou dézoome la carte loin de la maison.
- * Centre arrondi à 0,05° et rayon à 5 NM pour partager le cache entre écrans ; routes déjà connues seulement.
+ * Centre arrondi à 0,05° et rayon à 5 NM pour partager le cache entre écrans.
  */
-export function areaFinder(routes: RouteCache, get = fetchFi) {
+export function areaFinder(shared: FlightShared, get = fetchFi) {
   const cache = new Map<string, { at: number; list: Promise<Aircraft[]> }>();
   return async (lat: number, lon: number, nm: number): Promise<Aircraft[]> => {
     const la = Math.round(lat * 20) / 20, lo = Math.round(lon * 20) / 20;
@@ -177,18 +186,24 @@ export function areaFinder(routes: RouteCache, get = fetchFi) {
     const hit = cache.get(key);
     if (hit && Date.now() - hit.at < AREA_TTL_MS) return hit.list;
     for (const [k, v] of cache) if (Date.now() - v.at >= AREA_TTL_MS) cache.delete(k);
-    const list = get(`https://opendata.adsb.fi/api/v2/lat/${la}/lon/${lo}/dist/${r}`).then((j) => normalize(aircraftList(j), routes, new Map()));
+    const list = get(`https://opendata.adsb.fi/api/v2/lat/${la}/lon/${lo}/dist/${r}`).then((j) => {
+      const raw = aircraftList(j);
+      const now = Date.now();
+      shared.history.add(raw, now);
+      shared.lookup(raw.map((x) => x.flight?.trim() ?? ""), 3);
+      return normalize(raw, shared.routes, new Map(), now, shared.history);
+    });
     cache.set(key, { at: Date.now(), list });
     list.catch(() => cache.delete(key));
     return list;
   };
 }
 
-export function flightsCollector(routes: RouteCache = new Map()): Collector<Flights> {
-  const trails = new Map<string, [number, number][]>();
+export function flightsCollector(shared: FlightShared = flightShared()): Collector<Flights> {
+  const { routes, history, lookup } = shared;
   const seen = new Map<string, string>(); // hex vu aujourd'hui (jour de Sydney)
-  let lastRoutes = 0;
   let lastFallback = 0;
+  let lastWide = 0;
   return {
     id: "flights",
     everyMs: 10_000,
@@ -204,29 +219,19 @@ export function flightsCollector(routes: RouteCache = new Map()): Collector<Flig
         raw = aircraftList(await fetchJson(ADSB_LOL));
         source = "adsb.lol";
       }
-      // Traces des 10 dernières minutes (1 point par passage)
-      for (const r of raw) {
-        if (r.lat == null || r.lon == null) continue;
-        const t = trails.get(r.hex) ?? [];
-        t.push([Math.round(r.lat * 1e4) / 1e4, Math.round(r.lon * 1e4) / 1e4]);
-        trails.set(r.hex, t.slice(-60));
+      history.add(raw, now.getTime());
+      // Grand relevé pour les traces des vols de toute la région (jamais bloquant pour la maison).
+      if (now.getTime() - lastWide >= WIDE_EVERY_MS) {
+        lastWide = now.getTime();
+        void fetchFi(`https://opendata.adsb.fi/api/v2/lat/${SITE.lat}/lon/${SITE.lon}/dist/${WIDE_NM}`)
+          .then((j) => history.add(aircraftList(j), Date.now())).catch(() => {});
+        history.prune(now.getTime());
       }
-      for (const hex of trails.keys()) if (!raw.some((r) => r.hex === hex)) trails.delete(hex);
-      // Routes des indicatifs inconnus, par lots, gardées 6 h
-      const missing = raw.filter((r) => r.flight?.trim() && r.lat != null && (!routes.has(r.flight.trim()) || now.getTime() - routes.get(r.flight.trim())!.at > 6 * 3600e3));
-      if (missing.length && now.getTime() - lastRoutes >= ROUTES_EVERY_MS) {
-        lastRoutes = now.getTime();
-        try {
-          const res = await fetchJson<RawRoute[]>("https://api.adsb.lol/api/0/routeset", {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ planes: missing.slice(0, 100).map((r) => ({ callsign: r.flight!.trim(), lat: r.lat, lng: r.lon })) }),
-          });
-          for (const r of res) routes.set(r.callsign, { ...r, at: now.getTime() });
-        } catch { /* les routes sont un plus : on continue sans */ }
-      }
+      // Routes des indicatifs inconnus (adsbdb), quelques-uns par relevé ; elles servent au relevé suivant.
+      lookup(raw.filter((r) => r.lat != null).map((r) => r.flight?.trim() ?? ""), 5);
       const day = new Intl.DateTimeFormat("en-CA", { timeZone: "Australia/Sydney" }).format(now);
       for (const [hex, d] of seen) if (d !== day) seen.delete(hex);
-      const aircraft = normalize(raw, routes, trails, now.getTime());
+      const aircraft = normalize(raw, routes, new Map(), now.getTime(), history);
       for (const a of aircraft) if (a.distKm <= 10 && !a.onGround) seen.set(a.hex, day);
       return { aircraft, runway: runwayMode(aircraft), curfew: isCurfew(now), seenToday: seen.size, source };
     },

@@ -122,6 +122,8 @@ export interface Aircraft {
   progress: { pct: number; flownKm: number; leftKm: number } | null;
   overhead: { inMin: number; closestKm: number } | null;
   trail: [number, number][];
+  /** Décollage vu par le hub (ms depuis 1970), null si l'avion volait déjà à son entrée dans notre champ. */
+  tookOffAt?: number | null;
 }
 
 export interface Airline {
@@ -142,6 +144,12 @@ export interface Airport {
 
 /** Photo d'un avion (Planespotters), affichée avec le nom du photographe et un lien vers la page d'origine. */
 export interface AircraftPhoto {
+  /** « exact » : cet appareil ; « type » : un appareil du même modèle, à titre d'illustration. */
+  kind?: "exact" | "type";
+  /** Nom du modèle illustré (photo de type). */
+  typeName?: string;
+  /** Source affichée dans le crédit. */
+  site?: string;
   src: string;
   width: number;
   height: number;

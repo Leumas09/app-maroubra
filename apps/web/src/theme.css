@@ -191,6 +191,15 @@ th { color: var(--muted); font-weight: 500; }
 .btn.ghost { background: linear-gradient(var(--paper-2), var(--paper-3)); color: var(--ink); border-color: var(--rule); }
 /* Overhead : carte des avions, fiche de l'avion choisi, viseur du ciel */
 .map-panel { overflow: hidden; display: grid; gap: 10px; }
+/* Carte et fiche de l'avion côte à côte sur grand écran, l'une sous l'autre sinon */
+.ov-main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); gap: 20px; align-items: start; }
+.ov-main .ac-card { padding: 0 4px 12px 0; border-top: 0; max-height: calc(66vh + 70px); overflow-y: auto; }
+.nearby .list.planes { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); column-gap: 24px; }
+.leg-k { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.leg-time { font-size: 14px; font-weight: 500; margin-top: 2px; }
+.ac-photo-frame { position: relative; }
+.ac-photo-tag { position: absolute; left: 8px; top: 8px; padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; background: oklch(15% 0.01 80 / 0.72); color: oklch(98% 0 0); }
+@media (max-width: 1099px) { .ov-main { grid-template-columns: minmax(0, 1fr); } .ov-main .ac-card { max-height: none; overflow: visible; padding-top: 18px; border-top: 1px solid var(--rule); } }
 .map-tools { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
 .map-tools-right { display: flex; gap: 8px; }
 .btn.small { min-height: 40px; padding: 0 16px; font-size: 15px; }

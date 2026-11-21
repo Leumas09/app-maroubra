@@ -564,3 +564,16 @@ Demandes de Samuel :
 - **Statut officiel sur l'accueil.** Bandeau compact sous l'heure (drapeau, « Closed: shark sighting », texte des sauveteurs), lien vers Beach ; la jauge Beach affiche « Closed » quand la plage est fermée.
 
 Juge : captures de toutes les vues (jour, nuit, trois formats) et axe sans violation ; plage fermée simulée sur tablette et téléphone.
+
+## Partie M : traces, routes, photos de secours, fiche à côté de la carte (21 novembre 2026)
+
+Retours de Samuel sur la carte en production.
+
+| Demande | Réalisation | Juge |
+|---|---|---|
+| Traces absentes loin de la maison et sur l'avion choisi | `FlightHistory` (hub) : positions de tous les avions vus (maison toutes les 10 s, grand relevé de 250 NM toutes les 30 s, zones de la carte), 3 h gardées, un point toutes les 8 s. Trace courte pour la liste, trace complète de l'avion choisi (`/api/aircraft/:hex/trace`). adsb.fi refuse ses fichiers de traces hors de son site : nos traces commencent à l'entrée de l'avion dans notre champ | Tests unitaires ; Playwright, trace dessinée |
+| Heure de départ | Décollage vu (passage du sol en vol) : « Took off 15:20 » | Test unitaire |
+| D'où, vers où | Routes d'adsbdb.com par indicatif (12 h en cache, une requête par seconde au plus) ; `routeset` d'adsb.lol (vide depuis le 20/11) abandonné | Appel réel : THA472 SYD-BKK, QFA1 SYD-SIN ; tests |
+| Photo quand l'appareil n'en a pas | Planespotters, puis airport-data.com via adsbdb, puis photo Wikipédia du modèle marquée « Similar aircraft, not this one », lien vers le fichier (auteur et licence) | Appel réel adsbdb ; tests ; Wikipédia limite les appels : modèle gardé 7 jours, erreur passagère non retenue |
+| Fiche de l'avion | À droite de la carte sur grand écran, liste des avions proches dessous ; altitude en pieds et en mètres | Captures, axe |
+| Lignes sur la carte | Joints entre tuiles aux zooms fractionnaires : zoom par crans entiers | Capture |
