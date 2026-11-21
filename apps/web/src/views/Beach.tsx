@@ -229,7 +229,7 @@ export function Beach({ e, status, tide, now, buoy, near, marine, demo }: Props)
         )}
         <p className="note">Swim score <Fresh e={e} label="computed" /></p>
       </div>
-      <div className="card chart-scroll" style={{ padding: "14px 14px 8px" }}>
+      <div className="card chart-card" style={{ padding: "14px 14px 8px" }}>
         <DayRibbon b={b} now={now} tide={tide} />
         <div className="legend" aria-hidden="true">
           <span><i style={{ background: "var(--good)" }} />offshore wind</span>

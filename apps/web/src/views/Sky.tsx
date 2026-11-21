@@ -96,7 +96,7 @@ export function Sky({ s, iss, space, sunrise, hours }: { s: SkyModel; iss?: E<Is
         {catalog ? <SkyChart catalog={catalog} at={chartAt} night={s.isNight} /> : <div className="skychart-wait" aria-busy="true">Loading the star catalogue…</div>}
         <p className="note">Stars to magnitude 5 from the Hipparcos catalogue (d3-celestial data), positions checked against Skyfield to under 1 arcminute.</p>
       </div>
-      <div className="card chart-scroll" style={{ padding: 12 }}>
+      <div className="card chart-card" style={{ padding: 12 }}>
         <HorizonChart sun={s.tracks.sun} moon={s.tracks.moon} planets={s.tracks.planets} summary={skyLede(s, hours)} />
       </div>
       <div className="grid">

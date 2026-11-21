@@ -1,6 +1,5 @@
 import type { Buoy, Marine, SourceEntry } from "@maroubra/core";
 import { CardHead, Empty, Fresh } from "../components/bits";
-import { CenteredScroll } from "../components/CenteredScroll";
 import { compass, shortDate, time } from "../lib/format";
 import { curve, tideNow, type TideTable } from "../lib/tide";
 
@@ -91,13 +90,13 @@ export function SeaSection({ table, now, buoy, near, marine }: { table: TideTabl
         ) : <p className="lede muted">{table ? "Outside the computed tide table." : "Loading the tide table."}</p>}
       </div>
       {table && (
-        <CenteredScroll className="card chart-scroll" focus={0.32}>
+        <div className="card chart-card">
           <TideChart table={table} now={now} />
-        </CenteredScroll>
+        </div>
       )}
-      <CenteredScroll className="card chart-scroll" focus={0.32}>
+      <div className="card chart-card">
         <SwellChart buoy={buoy?.data ?? null} near={near?.data ?? null} marine={marine?.data ?? null} now={now} />
-      </CenteredScroll>
+      </div>
       <div className="grid">
         <div className="card">
           <CardHead title="Sydney buoy"><Fresh e={buoy} label="Reading" /></CardHead>

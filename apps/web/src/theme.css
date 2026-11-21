@@ -135,7 +135,7 @@ main { min-width: 0; padding: 36px 44px 40px 20px; display: grid; gap: 22px; ali
 
 /* Vues : sections séparées par des filets, graphiques dans des panneaux */
 .card { min-width: 0; padding: 18px 0 0; border-top: 1px solid var(--rule); }
-.card.map-card, .card.chart-scroll { padding: 12px; border-top: 0; border-radius: var(--radius); background: linear-gradient(var(--paper-2), var(--paper-3)); box-shadow: var(--edge-light), var(--shadow-panel); }
+.card.chart-card { padding: 12px; border-top: 0; border-radius: var(--radius); background: linear-gradient(var(--paper-2), var(--paper-3)); box-shadow: var(--edge-light), var(--shadow-panel); }
 .card h2 { margin: 0 0 12px; font-size: 15px; font-weight: 500; color: var(--muted); }
 .grid { display: grid; gap: 28px 32px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
 .big { font-family: var(--display); font-size: 36px; font-weight: 400; line-height: 1.05; letter-spacing: -0.03em; }
@@ -154,20 +154,12 @@ main { min-width: 0; padding: 36px 44px 40px 20px; display: grid; gap: 22px; ali
 .list li { display: grid; grid-template-columns: 64px 1fr; gap: 12px; align-items: baseline; padding: 9px 0; border-top: 1px solid var(--rule); }
 .list .when { font-weight: 500; }
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.target-inline { display: none; }
+.live-table td { overflow-wrap: anywhere; }
 th, td { text-align: right; padding: 8px 6px; border-bottom: 1px solid var(--rule); }
 th:first-child, td:first-child { text-align: left; }
 th { color: var(--muted); font-weight: 500; }
 .chart { width: 100%; height: auto; display: block; }
-.chart-scroll { overflow-x: auto; }
-.map-box { position: relative; }
-.chart.map { border-radius: 14px; touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; }
-.chart.map:active { cursor: grabbing; }
-.map-ctl { position: absolute; top: 10px; right: 10px; display: grid; gap: 6px; }
-.map-ctl button, .map-reset { border: 1px solid var(--line); background: var(--card); color: var(--ink); box-shadow: 0 1px 4px oklch(20% 0.02 80 / 0.25); cursor: pointer; }
-.map-ctl button { width: 44px; height: 44px; border-radius: 12px; font-size: 22px; line-height: 1; }
-.map-ctl button:disabled { opacity: 0.4; cursor: default; }
-.map-reset { position: absolute; left: 10px; top: 10px; display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border-radius: 22px; font-size: 14px; font-weight: 600; }
-.map-ctl button:focus-visible, .map-reset:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .note { font-size: 13px; color: var(--muted); margin: 10px 0 0; line-height: 1.5; }
 
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
@@ -206,13 +198,15 @@ th { color: var(--muted); font-weight: 500; }
 .map-panel { overflow: hidden; display: grid; gap: 10px; }
 /* Carte et fiche de l'avion côte à côte sur grand écran, l'une sous l'autre sinon */
 .ov-main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); gap: 20px; align-items: start; }
-.ov-main .ac-card { padding: 0 4px 12px 0; border-top: 0; max-height: calc(66vh + 70px); overflow-y: auto; }
+/* Pas d'ascenseur dans la fiche : elle s'allonge avec la page, et la carte reste en vue à côté (sticky). */
+.ov-main .ac-card { padding: 0 4px 12px 0; border-top: 0; }
+.ov-main > .map-panel { position: sticky; top: 16px; }
 .nearby .list.planes { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); column-gap: 24px; }
 .leg-k { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
 .leg-time { font-size: 14px; font-weight: 500; margin-top: 2px; }
 .ac-photo-frame { position: relative; }
 .ac-photo-tag { position: absolute; left: 8px; top: 8px; padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; background: oklch(15% 0.01 80 / 0.72); color: oklch(98% 0 0); }
-@media (max-width: 1099px) { .ov-main { grid-template-columns: minmax(0, 1fr); } .ov-main .ac-card { max-height: none; overflow: visible; padding-top: 18px; border-top: 1px solid var(--rule); } }
+@media (max-width: 1099px) { .ov-main { grid-template-columns: minmax(0, 1fr); } .ov-main > .map-panel { position: static; } .ov-main .ac-card { padding-top: 18px; border-top: 1px solid var(--rule); } }
 .map-tools { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
 .map-tools-right { display: flex; gap: 8px; }
 .btn.small { min-height: 40px; padding: 0 16px; font-size: 15px; }
@@ -280,15 +274,18 @@ th { color: var(--muted); font-weight: 500; }
 .wx-warning p { margin: 4px 0 0; color: var(--ink-2); font-size: 14px; }
 .wx-warning svg { flex: none; margin-top: 2px; }
 .wx-panel h2 { margin-bottom: 10px; }
-.wx-hours { list-style: none; margin: 0; padding: 4px 0 8px; display: flex; gap: 4px; overflow-x: auto; scrollbar-width: thin; }
-.wx-hours li { flex: none; width: 62px; display: grid; justify-items: center; gap: 6px; padding: 8px 0; border-radius: 12px; }
+/* Aucun ascenseur interne : les 24 heures et les 10 jours passent à la ligne au lieu de défiler. */
+.wx-hours { list-style: none; margin: 0; padding: 4px 0 0; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 4px; }
+.wx-hours li { min-width: 0; display: grid; justify-items: center; gap: 6px; padding: 8px 0; border-radius: 12px; }
 .wx-hours li:first-child { background: var(--paper-3); }
 .wx-h-temp { font-weight: 600; font-size: 17px; }
 .wx-h-pop { font-size: 13px; color: var(--accent); min-height: 16px; }
 .wx-h-time { font-size: 13px; color: var(--muted); }
-.wx-days { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 8px; scrollbar-width: thin; }
-.wx-day { flex: none; width: 84px; display: grid; justify-items: center; gap: 4px; padding: 12px 6px; border-radius: 999px; border: 1px solid var(--rule); background: linear-gradient(var(--paper-2), var(--paper-3)); color: var(--ink); cursor: pointer; font: inherit; }
+.wx-days { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 8px; padding: 2px; }
+.wx-day { min-width: 0; display: grid; justify-items: center; gap: 4px; padding: 12px 6px; border-radius: 999px; border: 1px solid var(--rule); background: linear-gradient(var(--paper-2), var(--paper-3)); color: var(--ink); cursor: pointer; font: inherit; }
 .wx-day[aria-selected="true"] { border: 2px solid var(--ink); background: var(--paper); }
+@media (max-width: 1000px) { .wx-hours { grid-template-columns: repeat(8, minmax(0, 1fr)); } .wx-days { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .wx-hours { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
 .wx-d-max { font-weight: 700; font-size: 17px; }
 .wx-d-min { color: var(--muted); font-size: 15px; }
 .wx-d-pop { font-size: 13px; color: var(--accent); min-height: 16px; }
@@ -456,9 +453,9 @@ button.cam-play:hover, button.cam-play:focus-visible { background: var(--accent)
 /* Tablette en portrait et téléphone : le rail devient un bandeau */
 @media (max-width: 899px) {
   .app { grid-template-columns: minmax(0, 1fr); }
-  .rail { position: static; height: auto; padding: 14px 16px 0; flex-direction: row; align-items: center; gap: 16px; overflow-x: auto; scrollbar-width: none; }
-  .rail::-webkit-scrollbar { display: none; }
-  .rail nav { flex-direction: row; gap: 2px; margin: 0; flex-grow: 0; }
+  /* Navigation sur plusieurs lignes plutôt qu'un bandeau qui défile et cache des onglets. */
+  .rail { position: static; height: auto; padding: 14px 16px 0; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 0 16px; }
+  .rail nav { flex-direction: row; flex-wrap: wrap; gap: 0 2px; margin: 0; flex-grow: 0; }
   .rail a { padding: 8px 10px; white-space: nowrap; font-size: 15px; min-height: 44px; }
   .rail a[aria-current="page"] { box-shadow: inset 0 -2px 0 var(--accent); }
   .wordmark { flex: none; }
@@ -475,8 +472,8 @@ button.cam-play:hover, button.cam-play:focus-visible { background: var(--accent)
   .gauge-value { font-size: 20px; }
   .gauge-label { font-size: 13px; }
   .gauge-sub { font-size: 12px; }
-  .chart-scroll .chart { min-width: 760px; }
   .live-table .target { display: none; }
+  .live-table .target-inline { display: block; }
   .pill { white-space: nowrap; }
   .huge { font-size: 56px; }
   .lede { font-size: 22px; }

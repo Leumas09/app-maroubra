@@ -94,7 +94,7 @@ function PressureGauge({ hpa }: { hpa: number }) {
 function HourStrip({ hours, night, nowS }: { hours: WeatherHour[]; night: boolean; nowS: number }) {
   if (!hours.length) return <Empty>No hourly forecast for this day.</Empty>;
   return (
-    <ol className="wx-hours" aria-label="Hourly forecast" tabIndex={0}>
+    <ol className="wx-hours" aria-label="Hourly forecast">
       {hours.map((h, i) => (
         <li key={h.t}>
           <span className="wx-h-temp">{Math.round(h.temp)}°</span>

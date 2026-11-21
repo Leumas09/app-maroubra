@@ -167,7 +167,7 @@ export function Home({ now, sky, brief, beach, beachStatus, weather, buoy, marin
       <BeachStatusLine e={beachStatus} now={now} />
       <BusLine now={now} />
 
-      <div className="band chart-scroll">
+      <div className="band chart-card">
         {sky ? <HorizonChart sun={sky.tracks.sun} moon={sky.tracks.moon} planets={sky.tracks.planets} summary={skyLede(sky, w?.hourly)} /> : <div style={{ minHeight: 200 }} aria-busy="true" />}
       </div>
 

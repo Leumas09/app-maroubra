@@ -78,13 +78,13 @@ function Live({ e }: { e: E<Verification> }) {
       <div className="card">
         <div className="card-head"><h2>Live, last {v?.windowDays ?? 30} days</h2><Fresh e={e} label="Checked" /></div>
         {!v ? <p className="muted" style={{ margin: 0 }}>Waiting for the first check of the archive.</p> : (
-          <div style={{ overflowX: "auto" }}>
+          <div>
             <table className="live-table">
               <thead><tr><th scope="col">Check</th><th scope="col" className="target">Target</th><th scope="col">Result</th><th scope="col">Status</th></tr></thead>
               <tbody>
                 {v.scores.map((s) => (
                   <tr key={s.key}>
-                    <td>{s.title}<div className="muted" style={{ fontSize: 12 }}>{s.judge}{s.since ? `, since ${shortDate(new Date(s.since))}` : ""}</div></td>
+                    <td>{s.title}<div className="muted" style={{ fontSize: 12 }}>{s.judge}{s.since ? `, since ${shortDate(new Date(s.since))}` : ""}</div><div className="muted target-inline" style={{ fontSize: 12 }}>Target: {s.target}</div></td>
                     <td className="target">{s.target}</td>
                     <td>{s.result}</td>
                     <td><span className={`pill ${STATUS[s.status][0]}`}>{STATUS[s.status][1]}</span></td>
@@ -128,14 +128,14 @@ export function TrackRecord({ live }: { live: E<Verification> }) {
       <div className="card">
         <h2>Before launch: the test bench</h2>
         <p className="note" style={{ marginTop: 0, marginBottom: 12 }}>Updated {data.generated}, on data the methods never saw while learning. Weather judged against Sydney Airport observations (NOAA ISD), waves against the Sydney Waverider buoy (Manly Hydraulics Laboratory, via AODN), sky against Skyfield with the JPL DE421 ephemeris.</p>
-        <div style={{ overflowX: "auto" }}>
-          <table>
-            <thead><tr><th scope="col">Check</th><th scope="col">Target</th><th scope="col">Result</th><th scope="col">Status</th></tr></thead>
+        <div>
+          <table className="live-table">
+            <thead><tr><th scope="col">Check</th><th scope="col" className="target">Target</th><th scope="col">Result</th><th scope="col">Status</th></tr></thead>
             <tbody>
               {checks.map((c) => (
                 <tr key={c.name}>
-                  <td>{c.name}<div className="muted" style={{ fontSize: 12 }}>{c.judge}</div></td>
-                  <td>{c.target}</td>
+                  <td>{c.name}<div className="muted" style={{ fontSize: 12 }}>{c.judge}</div><div className="muted target-inline" style={{ fontSize: 12 }}>Target: {c.target}</div></td>
+                  <td className="target">{c.target}</td>
                   <td>{c.result}</td>
                   <td><span className={`pill ${c.pass ? "good" : c.status === "untestable" ? "wait" : "miss"}`}>{c.pass ? "Met" : c.status === "untestable" ? "Not testable yet" : "Missed"}</span></td>
                 </tr>
