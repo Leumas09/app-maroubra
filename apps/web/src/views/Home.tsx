@@ -55,21 +55,23 @@ function voterId(): string {
  * Visible une fois le Soleil levé et jusqu'à 11 h, une fois par appareil.
  */
 function SunriseVote({ now, sunAlt }: { now: Date; sunAlt: number }) {
+  // L'écran ambiant reste ouvert des jours : tout est rapporté au jour courant, pas au montage.
   const day = localDay(now);
-  const [done, setDone] = useState(() => store.get("mb.voted") === day);
-  const [msg, setMsg] = useState<string | null>(null);
-  if (sunAlt < 3 || localHour(now) >= 11 || (done && !msg)) return null;
+  const [voted, setVoted] = useState(() => store.get("mb.voted"));
+  const [msg, setMsg] = useState<{ day: string; text: string; retry?: boolean } | null>(null);
+  const shown = msg?.day === day ? msg : null;
+  if (sunAlt < 3 || localHour(now) >= 11 || (voted === day && !shown)) return null;
+  const done = (text: string) => { store.set("mb.voted", day); setVoted(day); setMsg({ day, text }); };
   const vote = async (value: number | null) => {
-    store.set("mb.voted", day);
-    setDone(true);
-    if (value == null) { setMsg("No problem. Ask again tomorrow."); return; }
+    if (value == null) { done("No problem. Ask again tomorrow."); return; }
     const r = await fetch("/api/vote", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ date: day, value, voter: voterId() }) }).catch(() => null);
-    setMsg(r?.ok ? "Thanks. Your vote checks the sunrise score in the Track record." : "Could not save the vote.");
+    if (r?.ok) done("Thanks. Your vote checks the sunrise score in the Track record.");
+    else setMsg({ day, text: "Could not save the vote. Try again?", retry: true });
   };
   return (
     <div className="vote" role="group" aria-labelledby="vote-q">
-      <span id="vote-q">{msg ?? "This morning's sunrise: worth getting up for?"}</span>
-      {!msg && (
+      <span id="vote-q">{shown?.text ?? "This morning's sunrise: worth getting up for?"}</span>
+      {(!shown || shown.retry) && (
         <span className="vote-buttons">
           <button className="btn" onClick={() => vote(2)}>Yes</button>
           <button className="btn ghost" onClick={() => vote(1)}>So-so</button>

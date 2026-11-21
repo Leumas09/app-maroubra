@@ -192,7 +192,10 @@ export function flightsCollector(onOutcome: (o: OverheadOutcome) => void = () =>
       for (const r of raw) {
         if (r.lat == null || r.lon == null) continue;
         const t = trails.get(r.hex) ?? [];
-        t.push([Math.round(r.lat * 1e4) / 1e4, Math.round(r.lon * 1e4) / 1e4]);
+        const p: [number, number] = [Math.round(r.lat * 1e4) / 1e4, Math.round(r.lon * 1e4) / 1e4];
+        // Position inchangée (pas de nouveau message) : pas de point, sinon faux virage dans la prévision.
+        if (t.length && t.at(-1)![0] === p[0] && t.at(-1)![1] === p[1]) continue;
+        t.push(p);
         trails.set(r.hex, t.slice(-60));
       }
       for (const hex of trails.keys()) if (!raw.some((r) => r.hex === hex)) trails.delete(hex);

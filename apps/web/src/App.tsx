@@ -1,4 +1,4 @@
-import { lazy as reactLazy, Suspense, useEffect, useMemo, useState } from "react";
+import { Component, lazy as reactLazy, Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
 import type * as React from "react";
 import type { AirQuality, Beach as BeachData, Brief, Buoy, Fires, Flights, Iss, Marine, Metar, Moment, News as NewsData, Satellite, SpaceWeather, Sunrise, Verification, Weather as WeatherData } from "@maroubra/core";
 import { data, entry, isDemo, useLive } from "./lib/live";
@@ -6,6 +6,22 @@ import type { SkyModel } from "./lib/sky-model";
 import { loadTide, type TideTable } from "./lib/tide";
 import { Home } from "./views/Home";
 import { Sky } from "./views/Sky";
+/** Une vue qui ne peut pas se charger (hors ligne) n'éteint pas tout l'écran. */
+class ViewBoundary extends Component<{ view: string; children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  componentDidUpdate(prev: { view: string }) { if (prev.view !== this.props.view && this.state.failed) this.setState({ failed: false }); }
+  render() {
+    if (!this.state.failed) return this.props.children;
+    return (
+      <div className="card">
+        <p className="lede" style={{ margin: "0 0 12px" }}>This view could not load. The network may be down.</p>
+        <button className="btn" onClick={() => location.reload()}>Retry</button>
+      </div>
+    );
+  }
+}
+
 // Vues secondaires chargées à la demande : l'accueil s'affiche sans attendre les cartes ni les tableaux.
 // Après un déploiement, un écran resté ouvert peut demander un fichier qui n'existe plus : on recharge
 // la page une fois (la nouvelle version arrive), sans boucle si le réseau est vraiment coupé.
@@ -164,6 +180,7 @@ export function App() {
           {isDemo(snap) && <span className="pill miss">Sample data for testing, not live</span>}
           {snap && !connected && <span className="pill wait">Reconnecting…</span>}
         </div>
+        <ViewBoundary view={current}>
         <Suspense fallback={<div className="card" style={{ minHeight: 320 }} aria-busy="true" />}>
         {current === "home" && <Home now={now} sky={sky} brief={brief?.text ?? null} beach={beach} weather={weather} buoy={buoy} marine={entry<Marine>(snap, "marine")} sunrise={entry<Sunrise>(snap, "sunrise")} space={entry<SpaceWeather>(snap, "space")} moments={moments} />}
         {current === "weather" && <Weather e={weather} metar={entry<Metar>(snap, "metar")} air={air} sat={entry<Satellite>(snap, "satellite")} night={!!night} />}
@@ -176,6 +193,7 @@ export function App() {
         {current === "track" && <TrackRecord live={entry<Verification>(snap, "verify")} />}
         {current === "settings" && <Settings ambient={ambient} setAmbient={setAmbient} />}
         </Suspense>
+        </ViewBoundary>
       </main>
     </div>
   );

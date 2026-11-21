@@ -513,7 +513,7 @@ Le barreau 3 du plan (« remplacer le rituel, et le prouver ») n'était pas en 
 | Moments du ciel et nuages | ISS et lever de Lune sur la mer tus si le ciel sera couvert (85 %), signalés dès 50 % ; nuit noire, planètes et titre du soir annotés | Tests unitaires |
 | Cartes | Côte GSHHG pleine résolution, découpée (Sutherland-Hodgman) et simplifiée (Douglas-Peucker) : le port de Sydney et Botany Bay apparaissent, les îlots parasites disparaissent | Comparaison visuelle, alignement satellite |
 | Téléphone | Graphiques larges ouverts sur ce qui compte (Soleil ou Lune, maison, instant présent) ; Track record compact | Captures Playwright, 0 débordement |
-| Fiabilité | Notifications déjà envoyées gardées dans Table Storage (pas de doublon au redéploiement) | Code relu |
+| Fiabilité | Notifications déjà envoyées gardées dans Table Storage (pas de doublon au redéploiement) ; une prévision non rafraîchie depuis 90 min n'est plus réarchivée comme neuve ; une vue qui ne charge pas affiche « Retry » au lieu d'un écran blanc ; la pastille de reconnexion ne fait plus sauter l'écran | Relecture indépendante du code de la nuit (3 bogues et 4 risques trouvés, tous corrigés et testés) ; Lighthouse : décalage 0,107 → 0,015, performance mobile 95 → 98 |
 
 ### I.3 Ce qui a été essayé et écarté (objectifs manqués, gardés visibles)
 
@@ -528,5 +528,5 @@ Le barreau 3 du plan (« remplacer le rituel, et le prouver ») n'était pas en 
 
 1. Relire la branche, puis fusionner dans `main` après OK : le workflow teste, construit et déploie. Pas de what-if nécessaire (aucun changement Bicep).
 2. Dans `/health`, trois sources nouvelles doivent passer à `ok: true` : `fc-airport`, `fc-buoy`, `satellite`, puis `verify`.
-3. Le Track record vivant montrera dès le premier passage les 3 semaines d'archive déjà accumulées (si l'archive a bien tourné depuis le 1er novembre), en jugeant la prévision Maroubra contre l'aéroport ; le point aéroport prendra le relais après 7 jours.
+3. Le Track record vivant montrera dès le premier passage les 3 semaines d'archive déjà accumulées (si l'archive a bien tourné depuis le 1er novembre). Il juge la prévision **affichée** (point de Maroubra) contre l'aéroport, à 7 km ; la même prévision au point exact de l'aéroport est donnée en référence après 7 jours, pour séparer l'erreur du modèle de celle due au lieu.
 4. La correction ne s'appliquera d'elle-même que lorsqu'elle aura battu le modèle brut sur 14 jours avec au moins 300 heures jugées.

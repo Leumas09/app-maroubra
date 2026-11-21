@@ -86,7 +86,7 @@ for (let i = 0; i < 30 * 24; i++) {
 }
 const overhead = Array.from({ length: 41 }, (_, i) => ({ hex: `d${i}`, callsign: null, at: new Date((T0 + i * 60000) * 1000).toISOString(), inMin: 2 + (i % 4), minKm: i % 9 === 0 ? 2.4 : 0.3 + (i % 5) * 0.2, hit: i % 9 !== 0 }));
 const days = Array.from({ length: 6 }, (_, i) => new Date((T0 + (24 + i) * 86400) * 1000).toISOString().slice(0, 10));
-const verification = verify({ fcAirport: fc, fcMaroubra: [], fcBuoy: fcB, fcMarine: [], metar: obs, buoy: obsB, overhead, sunrise: days.map((d, i) => ({ date: d, score: [7.5, 3, 5.5, 8, 2, 6][i] })), votes: days.map((d, i) => ({ date: d, value: [2, 0, 1, 2, 0, 1][i] })) }, nowS);
+const verification = verify({ fcAirport: [], fcMaroubra: fc, fcBuoy: fcB, fcMarine: [], metar: obs, buoy: obsB, overhead, sunrise: days.map((d, i) => ({ date: d, score: [7.5, 3, 5.5, 8, 2, 6][i] })), votes: days.map((d, i) => ({ date: d, value: [2, 0, 1, 2, 0, 1][i] })) }, nowS);
 const weatherShown = applyCorrection(weather, verification, at.getTime());
 
 // Image satellite : le vrai fichier Himawari du 21/11/2026 12:00 UTC (fixture des tests), horodaté à l'heure de la démo.

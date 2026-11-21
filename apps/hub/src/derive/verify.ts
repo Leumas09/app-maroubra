@@ -195,7 +195,7 @@ function continuous(key: "temp" | "wind", ps: Pair[], now: number, floor?: numbe
   return {
     score: {
       key, title, unit, n, since: recent[0] ? new Date(Math.min(...recent.map((p) => p.valid)) * 1000).toISOString() : null,
-      judge: "Sydney Airport METAR, every half hour",
+      judge: "Maroubra forecast vs Sydney Airport METAR (7 km west)",
       target: "error −25% vs raw model",
       status: status(days, 7, gain >= 0.25),
       result: n ? `${r2(corMae)} ${unit} mean error, ${gain >= 0 ? "−" : "+"}${pct(Math.abs(gain))} vs raw` : "No data yet",
@@ -223,11 +223,11 @@ export function rainScore(fc: FcRow[], obs: ObsRow[], now: number): LiveScore {
   const skill = bsRef > 0 ? 1 - bs / bsRef : NaN;
   const wet = ps.filter((p) => p.obs === 1).length;
   return {
-    key: "rain", title: "Chance of rain, live", n, since: ps[0] ? new Date(ps[0].valid * 1000).toISOString() : null,
+    key: "rain", title: "Chance of rain, live", n, since: n ? new Date(Math.min(...ps.map((p) => p.valid)) * 1000).toISOString() : null,
     judge: "Rain reported in the Sydney Airport METAR",
     target: "better than climatology (Brier skill > 0)",
     status: status(wet, 10, skill > 0),
-    result: Number.isFinite(skill) ? `Brier skill ${skill >= 0 ? "+" : ""}${r2(skill)}` : "No data yet",
+    result: Number.isFinite(skill) ? `Brier skill ${skill >= 0 ? "+" : ""}${r2(skill)}` : n ? `No rain in ${n} hours checked` : "No data yet",
     detail: n ? `${wet} rainy hours out of ${n} checked (next 24 h forecasts). 0 means no better than always saying ${Math.round(base * 100)}%, 1 is perfect.${wet < 10 ? " Needs at least 10 rainy hours to judge." : ""}` : "The archive needs a few days.",
   };
 }
@@ -238,7 +238,7 @@ export function wavesScore(fc: FcRow[], obs: ObsRow[], now: number, atBuoy: bool
   const bias = ps.length ? ps.reduce((s, p) => s + p.fc - p.obs, 0) / ps.length : NaN;
   const days = new Set(ps.map((p) => Math.floor(p.valid / 86400))).size;
   return {
-    key: "waves", title: "Wave height, live", unit: "m", n: ps.length, since: ps[0] ? new Date(ps[0].valid * 1000).toISOString() : null,
+    key: "waves", title: "Wave height, live", unit: "m", n: ps.length, since: ps.length ? new Date(Math.min(...ps.map((p) => p.valid)) * 1000).toISOString() : null,
     judge: "Sydney Waverider buoy (Manly Hydraulics Laboratory)",
     target: "within 30 cm on average",
     status: status(days, 7, err <= 0.3),
@@ -254,7 +254,7 @@ export function overheadScore(outcomes: OverheadOutcome[], now: number): LiveSco
   const rate = recent.length ? hits / recent.length : NaN;
   const near = recent.filter((o) => o.minKm != null).map((o) => o.minKm!).sort((a, b) => a - b);
   return {
-    key: "overhead", title: "“Overhead in N min”, live", n: recent.length, since: recent[0]?.at ?? null,
+    key: "overhead", title: "“Overhead in N min”, live", n: recent.length, since: recent.map((o) => o.at).sort()[0] ?? null,
     judge: "The aircraft's own ADS-B track afterwards",
     target: "90% pass within 1.5 km",
     status: status(recent.length, 20, rate >= 0.9),
@@ -316,14 +316,25 @@ export interface ArchiveData {
   votes: VoteRow[];
 }
 
-/** Le point aéroport prend le relais dès qu'il a une semaine d'historique. */
-const preferred = (a: FcRow[], b: FcRow[]) => (new Set(a.map((r) => Math.floor(r.valid / 86400))).size >= 7 ? a : b);
+/** Jours d'émission distincts (et non de validité, qui courent 48 h en avance). */
+const issuedDays = (rows: FcRow[]) => new Set(rows.map((r) => Math.floor(r.issued / 86400))).size;
+
+/** Erreur moyenne du modèle brut au point exact de l'aéroport : la part de l'erreur qui ne tient pas au lieu. */
+function airportNote(fcAirport: FcRow[], metar: ObsRow[], key: "temp" | "wind", now: number): string {
+  if (issuedDays(fcAirport) < 7) return "";
+  const ps = pairs(fcAirport, metar, key, key === "temp" ? "temp" : "windKmh").filter((p) => p.valid >= now - WINDOW_DAYS * 86400 && p.valid <= now);
+  return ps.length ? ` Same raw model at the airport itself: ${r2(mae(ps.map((p) => p.fc - p.obs)))} ${key === "temp" ? "°C" : "km/h"}.` : "";
+}
 
 export function verify(d: ArchiveData, now = Date.now() / 1000): Verification {
-  const fc = preferred(d.fcAirport, d.fcMaroubra);
+  // La correction est apprise, jugée et activée sur la prévision AFFICHÉE (point de Maroubra), contre
+  // l'observation la plus proche (aéroport, 7 km). Le score corrigé est donc bien celui de l'écran.
+  const fc = d.fcMaroubra;
   const temp = continuous("temp", pairs(fc, d.metar, "temp", "temp"), now);
   const wind = continuous("wind", pairs(fc, d.metar, "wind", "windKmh"), now, 0);
-  const atBuoy = new Set(d.fcBuoy.map((r) => Math.floor(r.valid / 86400))).size >= 7;
+  temp.score.detail += airportNote(d.fcAirport, d.metar, "temp", now);
+  wind.score.detail += airportNote(d.fcAirport, d.metar, "wind", now);
+  const atBuoy = issuedDays(d.fcBuoy) >= 7;
   return {
     at: new Date(now * 1000).toISOString(),
     windowDays: WINDOW_DAYS,

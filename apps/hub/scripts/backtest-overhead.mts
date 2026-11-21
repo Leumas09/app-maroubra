@@ -48,7 +48,9 @@ for (const [name, pred] of Object.entries(predictors)) {
     for (const r of s.ac) {
       if (r.lat == null || r.lon == null) continue;
       const tr = trails.get(r.hex) ?? [];
-      tr.push([r.lat, r.lon]);
+      const p: [number, number] = [Math.round(r.lat * 1e4) / 1e4, Math.round(r.lon * 1e4) / 1e4];
+      if (tr.length && tr.at(-1)![0] === p[0] && tr.at(-1)![1] === p[1]) continue;
+      tr.push(p);
       trails.set(r.hex, tr.slice(-60));
     }
     const acs = normalize(s.ac, new Map(), trails).map((a) => ({ ...a, overhead: pred(a) }));

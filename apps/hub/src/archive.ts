@@ -47,23 +47,29 @@ export function memoryArchive(): ArchiveTable & { rows: Map<string, Row> } {
 
 const num = (v: number | null | undefined) => (v == null || !Number.isFinite(v) ? -99 : v);
 
+/** Une prévision n'est archivée comme émise à cette heure que si elle a été rafraîchie dans les 90 min. */
+function fresh<T>(store: Store, id: string, now: Date): T | null {
+  const e = store.get<T>(id);
+  return e?.updatedAt && now.getTime() - Date.parse(e.updatedAt) <= 90 * 60e3 ? e.data : null;
+}
+
 export function hourRows(store: Store, now = new Date()): Row[] {
   const run = hourKey(now);
   const day = run.slice(0, 8);
   const rows: Row[] = [];
-  const w = store.data<Weather>("weather");
+  const w = fresh<Weather>(store, "weather", now);
   for (const h of w?.hourly.slice(0, 50) ?? []) {
     rows.push({ partitionKey: `fc-openmeteo-${day}`, rowKey: `${run}-${h.t}`, issued: run, valid: h.t, temp: h.tempRaw ?? h.temp, wind: h.windRaw ?? h.wind, windDir: h.windDir, gust: h.gust, precip: h.precip, pop: h.pop ?? -1, cloud: h.cloud });
   }
-  const a = store.data<PointForecast>("fc-airport");
+  const a = fresh<PointForecast>(store, "fc-airport", now);
   for (const h of a?.hourly.slice(0, 50) ?? []) {
     rows.push({ partitionKey: `fc-yssy-${day}`, rowKey: `${run}-${h.t}`, issued: run, valid: h.t, temp: num(h.temp), wind: num(h.wind), gust: num(h.gust), precip: num(h.precip), pop: h.pop ?? -1 });
   }
-  const m = store.data<Marine>("marine");
+  const m = fresh<Marine>(store, "marine", now);
   for (const h of m?.hourly.slice(0, 50) ?? []) {
-    rows.push({ partitionKey: `fc-marine-${day}`, rowKey: `${run}-${h.t}`, issued: run, valid: h.t, hs: h.waveHeight ?? -1, swell: h.swellHeight ?? -1, tp: h.swellPeriod ?? -1, sst: h.sst ?? -1 });
+    rows.push({ partitionKey: `fc-marine-${day}`, rowKey: `${run}-${h.t}`, issued: run, valid: h.t, hs: num(h.waveHeight), swell: num(h.swellHeight), tp: num(h.swellPeriod), sst: num(h.sst) });
   }
-  const bp = store.data<PointForecast>("fc-buoy");
+  const bp = fresh<PointForecast>(store, "fc-buoy", now);
   for (const h of bp?.hourly.slice(0, 50) ?? []) {
     rows.push({ partitionKey: `fc-buoypt-${day}`, rowKey: `${run}-${h.t}`, issued: run, valid: h.t, hs: num(h.hs) });
   }
@@ -73,7 +79,7 @@ export function hourRows(store: Store, now = new Date()): Row[] {
   }
   const buoy = store.data<Buoy>("buoy");
   for (const b of buoy?.series.slice(-6) ?? []) {
-    rows.push({ partitionKey: `obs-buoy-${monthKey(new Date(b.t * 1000))}`, rowKey: String(b.t), hs: b.hs ?? -1, tp: b.tp ?? -1, dir: b.dir ?? -1 });
+    rows.push({ partitionKey: `obs-buoy-${monthKey(new Date(b.t * 1000))}`, rowKey: String(b.t), hs: num(b.hs), tp: num(b.tp), dir: num(b.dir) });
   }
   // Score du lever de soleil : la dernière prévision émise avant le lever reste dans l'archive.
   const s = store.data<Sunrise>("sunrise");
@@ -107,10 +113,12 @@ export async function archiveVote(table: ArchiveTable | null, v: { date: string;
 
 // Lecture : les partitions de plus de deux jours ne changent plus, on les garde en cache.
 const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) && v > -90 ? v : null);
+/** Hauteurs de vagues : les anciennes lignes notaient « absente » par -1. */
+const height = (v: unknown) => { const x = n(v); return x != null && x >= 0 ? x : null; };
 
 const toFc = (r: Row): FcRow => ({
   issued: issuedToUnix(String(r.issued)), valid: Number(r.valid), temp: n(r.temp), wind: n(r.wind),
-  pop: typeof r.pop === "number" && r.pop >= 0 ? r.pop : null, hs: n(r.hs),
+  pop: typeof r.pop === "number" && r.pop >= 0 ? r.pop : null, hs: height(r.hs),
 });
 
 const FC_COLS = ["issued", "valid", "temp", "wind", "pop", "hs"];
@@ -158,7 +166,7 @@ export function archiveReader(table: ArchiveTable) {
     const groups = await pool<unknown[]>([
       ...fcs("fc-openmeteo"), ...fcs("fc-yssy"), ...fcs("fc-marine"), ...fcs("fc-buoypt"),
       ...months.map((m) => () => part(`obs-yssy-${m}`, now, toMetar, ["temp", "windKt", "rain", "raw"])),
-      ...months.map((m) => () => part(`obs-buoy-${m}`, now, (r): ObsRow => ({ t: Number(r.rowKey), hs: n(r.hs) }), ["hs"])),
+      ...months.map((m) => () => part(`obs-buoy-${m}`, now, (r): ObsRow => ({ t: Number(r.rowKey), hs: height(r.hs) }), ["hs"])),
       ...months.map((m) => () => part(`ovh-${m}`, now, (r): OverheadOutcome => ({ hex: String(r.hex), callsign: (r.callsign as string) || null, at: String(r.at), inMin: Number(r.inMin), minKm: n(r.minKm), hit: r.hit === true }))),
       ...years.map((y) => () => part(`sunrise-${y}`, now, (r): SunriseRow => ({ date: r.rowKey, score: Number(r.score) }), ["score"])),
       ...years.map((y) => () => part(`vote-${y}`, now, (r): VoteRow => ({ date: String(r.date), value: Number(r.value) }), ["date", "value"])),

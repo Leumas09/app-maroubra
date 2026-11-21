@@ -74,7 +74,7 @@ describe("correction apprise en ligne, sans fuite du futur", () => {
 
   it("le Track record vivant n'active la correction que si elle bat le modèle brut", () => {
     const { fc, obs } = month();
-    const v = verify({ fcAirport: fc, fcMaroubra: [], fcBuoy: [], fcMarine: [], metar: obs, buoy: [], overhead: [], sunrise: [], votes: [] }, T0 + 30 * 86400);
+    const v = verify({ fcAirport: [], fcMaroubra: fc, fcBuoy: [], fcMarine: [], metar: obs, buoy: [], overhead: [], sunrise: [], votes: [] }, T0 + 30 * 86400);
     const temp = v.scores.find((s) => s.key === "temp")!;
     expect(temp.status).not.toBe("collecting");
     expect(v.correction.temp.on).toBe(true);
@@ -90,7 +90,7 @@ describe("correction apprise en ligne, sans fuite du futur", () => {
   it("applique la correction à l'écran en gardant les valeurs brutes", () => {
     const { fc, obs } = month();
     const now = T0 + 30 * 86400;
-    const v = verify({ fcAirport: fc, fcMaroubra: [], fcBuoy: [], fcMarine: [], metar: obs, buoy: [], overhead: [], sunrise: [], votes: [] }, now);
+    const v = verify({ fcAirport: [], fcMaroubra: fc, fcBuoy: [], fcMarine: [], metar: obs, buoy: [], overhead: [], sunrise: [], votes: [] }, now);
     const hours = Array.from({ length: 30 }, (_, i) => now + i * 3600);
     const w = { current: { t: now, temp: 22, feels: 22 }, rainPast24h: 0, hourly: hours.map((t) => ({ t, temp: truth(t) + modelBias(t), feels: truth(t) + modelBias(t), wind: 25 })),
       daily: [{ t: now, max: 30, min: 15 }] } as unknown as Weather;
@@ -183,5 +183,31 @@ describe("archive : écrire puis relire", () => {
     expect(d.sunrise).toEqual([{ date: "2026-11-22", score: 7.5 }]);
     const v: Verification = verify(d, now.getTime() / 1000);
     expect(v.scores).toHaveLength(6);
+  });
+});
+
+describe("corrections de la relecture", () => {
+  it("une hauteur de vague absente (-1 dans les anciennes lignes) n'est pas jugée comme 0 m d'erreur… ni -1 m", async () => {
+    const mem = memoryArchive();
+    const t = Date.UTC(2026, 10, 20, 0) / 1000;
+    await mem.upsert({ partitionKey: "obs-buoy-202611", rowKey: String(t), hs: -1, tp: -1, dir: -1 });
+    await mem.upsert({ partitionKey: "fc-marine-20261119", rowKey: `2026111922-${t}`, issued: "2026111922", valid: t, hs: -1 });
+    const d = await archiveReader(mem)(new Date(t * 1000 + 3600e3));
+    expect(d.buoy[0].hs).toBeNull();
+    expect(d.fcMarine[0].hs).toBeNull();
+  });
+  it("« since » est le début de la fenêtre, pas le jour le plus récent", () => {
+    const { fc, obs } = month(10);
+    const v = verify({ fcAirport: [], fcMaroubra: [...fc].reverse(), fcBuoy: [], fcMarine: [], metar: obs, buoy: [], overhead: [], sunrise: [], votes: [] }, T0 + 10 * 86400);
+    const rain = v.scores.find((s) => s.key === "rain")!;
+    expect(Date.parse(rain.since!) / 1000).toBeLessThan(T0 + 86400);
+  });
+  it("une prévision non rafraîchie depuis plus de 90 min n'est pas réarchivée comme neuve", async () => {
+    const store = new Store();
+    const old = new Date("2026-11-21T00:00:00Z");
+    store.success("weather", { hourly: [{ t: 1, temp: 20, wind: 1, windDir: 1, gust: 1, precip: 0, pop: 0, cloud: 0 }], daily: [], current: {} }, old);
+    const mem = memoryArchive();
+    expect(await archiveHour(mem, store, new Date("2026-11-21T01:00:00Z"))).toBe(1);
+    expect(await archiveHour(mem, store, new Date("2026-11-21T03:00:00Z"))).toBe(0);
   });
 });
