@@ -609,3 +609,15 @@ Samuel trouvait la page Sky pauvre. Plan en trois paliers ; les deux premiers so
    Toucher un astre le nomme ; un curseur avance l'heure sur 12 h. Le catalogue est chargé à la demande (64 Ko compressés). Juge : Skyfield + DE421 (`bench/stars_reference.py`) sur 20 étoiles et 3 dates de 2026 à 2030, écart maximal 0,37′ (moyen 0,30′) pour un objectif de 1′.
 2. **« Tonight, the best to see »** : passages de l'ISS, planètes à leur plus haut, rapprochements à moins de 4°, cœur de la Voie lactée, essaims d'étoiles filantes actifs (liste de travail de l'IMO, taux attendu en ville), lever de Lune sur la mer, éclipses à 14 jours. Chacun a une heure, une direction et un score de visibilité qui combine les nuages par couche (Open-Meteo), la Lune pour ce qui est pâle et la hauteur. Le score est expérimental.
 3. **À faire** : notification « Look up now » et bilan après coup. Les nuages réels (Himawari) et les votes « Saw it? » jugeront le score, avec un accord go/no-go visé d'au moins 80 % sur un mois. Les étoiles sont aussi à ajouter au Sky finder.
+
+## Partie Q : bus 396 du matin sur l'accueil (21 novembre 2026)
+
+Demande de Samuel : les jours de semaine, les 396 entre 7 h 15 et 7 h 45 et entre 8 h 15 et 8 h 45, depuis « Maroubra Rd after Hereward St » vers Maroubra Junction. Le week-end, on montre le lundi ; après 8 h 45, le jour de semaine suivant.
+
+- **Source officielle** : GTFS des bus de Sydney de Transport for NSW Open Data (CC BY 4.0), publié le 20/11/2026. Arrêt `2035144`, ligne `2509_396`, direction 1 (vers la ville par Maroubra Junction).
+- **Extraction** : `apps/hub/scripts/bus_396.py` construit `apps/web/src/data/bus-396.json`, soit les départs de chaque jour de semaine du 20/11/2026 au 16/09/2027, exceptions du calendrier comprises.
+  - Horaire normal : 07:19, 07:26, 07:35, 07:43, 08:25, 08:35.
+  - Vacances scolaires : 07:16, 07:24, 07:33, 07:42, 08:21, 08:31, 08:41.
+  - Jours fériés : 07:28, 08:15, 08:24, 08:32, 08:42.
+- **Clé d'API** : la clé TfNSW de Samuel est enregistrée dans l'environnement de développement seulement. Elle n'est ni dans le dépôt ni dans la Container App.
+- **Limite** : l'horaire est figé à la date d'extraction. TfNSW publie souvent des mises à jour : relancer le script en cas de changement d'horaire. Un rafraîchissement automatique, et les retards en temps réel (GTFS-realtime), demanderaient la clé comme secret de la Container App. Ce serait un nouveau secret, donc à accepter par Samuel, avec un changement Bicep.

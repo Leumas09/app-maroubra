@@ -1,6 +1,7 @@
 // Accueil (direction B « Instrument ») : l'heure, une phrase, le ciel tracé, les niveaux et les prochains moments.
 import type { Beach, BeachStatus, Buoy, Marine, SourceEntry, SpaceWeather, Sunrise, Weather } from "@maroubra/core";
 import { BeachStatusLine } from "../components/beach-status";
+import { BusLine } from "../components/BusLine";
 import { HorizonChart } from "../components/HorizonChart";
 import { compass, longDate, pct, time } from "../lib/format";
 import type { SkyModel } from "../lib/sky-model";
@@ -116,6 +117,7 @@ export function Home({ now, sky, brief, beach, beachStatus, weather, buoy, marin
       </div>
 
       <BeachStatusLine e={beachStatus} now={now} />
+      <BusLine now={now} />
 
       <div className="band chart-scroll">
         {sky ? <HorizonChart sun={sky.tracks.sun} moon={sky.tracks.moon} planets={sky.tracks.planets} summary={skyLede(sky)} /> : <div style={{ minHeight: 200 }} aria-busy="true" />}
