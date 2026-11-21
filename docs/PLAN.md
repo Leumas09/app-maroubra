@@ -577,3 +577,13 @@ Retours de Samuel sur la carte en production.
 | Photo quand l'appareil n'en a pas | Planespotters, puis airport-data.com via adsbdb, puis photo Wikipédia du modèle marquée « Similar aircraft, not this one », lien vers le fichier (auteur et licence) | Appel réel adsbdb ; tests ; Wikipédia limite les appels : modèle gardé 7 jours, erreur passagère non retenue |
 | Fiche de l'avion | À droite de la carte sur grand écran, liste des avions proches dessous ; altitude en pieds et en mètres | Captures, axe |
 | Lignes sur la carte | Joints entre tuiles aux zooms fractionnaires : zoom par crans entiers | Capture |
+
+## Partie N : page Weather sur le modèle de Google Météo (21 novembre 2026)
+
+Demande de Samuel : les fonctions de Google Météo.
+- L'instant : conditions, température, ressenti, maximum et minimum du jour.
+- **Avertissements officiels** : flux RSS public NSW du Bureau of Meteorology (`IDZ00054`, usage personnel non commercial). On ne garde que les types utiles à Maroubra : canicule, intempéries, orages violents, feux, houle dangereuse, tsunami, vents forts, et les crues des seules rivières de Sydney. Ils sont pris à l'échelle de l'État ou s'ils nomment Sydney. L'API JSON du BOM, plus précise par district, est écartée : ses conditions interdisent de l'utiliser (« You must not use, copy or share it »).
+- Heure par heure, et dix jours que l'on peut choisir : un jour choisi donne ses heures et ses tuiles.
+- Tuiles : pluie du jour, vent et direction, qualité de l'air, UV, lever et coucher du soleil, visibilité, pression, humidité et point de rosée.
+
+Juge : pour « maintenant », visibilité, pression et point de rosée viennent du METAR de l'aéroport de Sydney (mesures). Les valeurs des jours suivants sont des prévisions Open-Meteo, **pas encore vérifiées dans le Track record** : à ajouter au job de vérification nocturne (lot G.3).

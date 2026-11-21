@@ -18,7 +18,7 @@ import { issCollector } from "./sources/iss";
 import { newsCollector } from "./sources/news";
 import { beachStatus } from "./sources/beach-status";
 import { buoy, marine } from "./sources/sea";
-import { metar, weather } from "./sources/weather";
+import { metar, warnings, weather } from "./sources/weather";
 import { Store } from "./store";
 import { azureCredential, table } from "./tables";
 
@@ -70,7 +70,7 @@ const derived: Collector[] = [
 const flights = flightShared();
 
 const collectors: Collector[] = [
-  weather, metar, marine, buoy, beachStatus, flightsCollector(flights), fires, air, space, issCollector(), sunrise, newsCollector(llm), ...derived,
+  weather, metar, warnings, marine, buoy, beachStatus, flightsCollector(flights), fires, air, space, issCollector(), sunrise, newsCollector(llm), ...derived,
 ];
 startCollectors(store, collectors, { offline: cfg.offline });
 

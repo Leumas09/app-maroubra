@@ -9,7 +9,7 @@ import { isCurfew, normalize, predictOverhead, runwayMode, type RawAc } from "..
 import { auroraFromKp, parseDescription, parseFires, parseSpace } from "../src/sources/hazards";
 import { dedupe, keywordLocal, parseRss } from "../src/sources/news";
 import { parseBuoyRows } from "../src/sources/sea";
-import { parseMetar, parseWeather } from "../src/sources/weather";
+import { parseMetar, parseWarnings, parseWeather } from "../src/sources/weather";
 import { outputText } from "../src/llm";
 
 const rfs = JSON.parse(readFileSync(new URL("./fixtures/rfs-majorincidents-2020-10-10.json", import.meta.url), "utf8"));
@@ -229,5 +229,19 @@ describe("actualités", () => {
     expect(items[0].source).toBe("The Daily Telegraph");
     expect(dedupe(items).length).toBe(2);
     expect(keywordLocal(items[2].title)).toBe(false);
+  });
+});
+
+describe("avertissements du BOM (flux RSS NSW réel du 21/11/2026)", () => {
+  const xml = readFileSync(new URL("./fixtures/bom-warnings-nsw-2026-11-21.xml", import.meta.url), "utf8");
+  it("garde la canicule à l'échelle de l'État, écarte le résumé marin et les crues de l'intérieur", () => {
+    const w = parseWarnings(xml);
+    expect(w.items.map((x) => x.title)).toEqual(["Heatwave Warning (NSW)"]);
+    expect(w.items[0]).toMatchObject({ statewide: true, link: "https://reg.bom.gov.au/nsw/warnings/heatwave.shtml" });
+  });
+  it("garde un avertissement qui nomme Sydney, écarte celui d'une autre région", () => {
+    const item = (t: string) => `<item><title>21/16:00 EDT ${t}</title><link>http://reg.bom.gov.au/x.shtml</link><pubDate>Sat, 21 Nov 2026 05:00:00 GMT</pubDate></item>`;
+    const w = parseWarnings(`<rss><channel>${item("Severe Thunderstorm Warning for Metropolitan Sydney")}${item("Fire Weather Warning for Northern Slopes")}</channel></rss>`);
+    expect(w.items).toEqual([{ title: "Severe Thunderstorm Warning for Metropolitan Sydney", link: "https://reg.bom.gov.au/x.shtml", at: "2026-11-21T05:00:00.000Z", statewide: false }]);
   });
 });

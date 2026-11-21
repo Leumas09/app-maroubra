@@ -255,6 +255,54 @@ th { color: var(--muted); font-weight: 500; }
 .skyfinder-hint { margin: 0; font-size: 13px; opacity: 0.85; line-height: 1.4; }
 .skyfinder .btn.ghost { min-height: 40px; }
 
+/* Météo : l'instant, avertissements, heure par heure, dix jours, tuiles */
+.wx { display: grid; gap: 18px; }
+.wx-now { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 20px; }
+.wx-place { font-size: 15px; color: var(--muted); display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+.wx-cond { display: flex; align-items: center; gap: 10px; font-family: var(--display); font-size: 26px; letter-spacing: -0.02em; margin-top: 6px; }
+.wx-temp { font-family: var(--display); font-size: 104px; line-height: 0.9; letter-spacing: -0.05em; }
+.wx-sub { font-size: 18px; text-align: right; display: grid; gap: 4px; }
+.wx-warning { display: flex; gap: 14px; align-items: flex-start; padding: 16px 18px; border-radius: var(--radius); background: var(--warn-bg); color: var(--miss-ink); }
+.wx-warning strong { font-family: var(--display); font-size: 20px; font-weight: 500; }
+.wx-warning p { margin: 4px 0 0; color: var(--ink-2); font-size: 14px; }
+.wx-warning svg { flex: none; margin-top: 2px; }
+.wx-panel h2 { margin-bottom: 10px; }
+.wx-hours { list-style: none; margin: 0; padding: 4px 0 8px; display: flex; gap: 4px; overflow-x: auto; scrollbar-width: thin; }
+.wx-hours li { flex: none; width: 62px; display: grid; justify-items: center; gap: 6px; padding: 8px 0; border-radius: 12px; }
+.wx-hours li:first-child { background: var(--paper-3); }
+.wx-h-temp { font-weight: 600; font-size: 17px; }
+.wx-h-pop { font-size: 13px; color: var(--accent); min-height: 16px; }
+.wx-h-time { font-size: 13px; color: var(--muted); }
+.wx-days { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 8px; scrollbar-width: thin; }
+.wx-day { flex: none; width: 84px; display: grid; justify-items: center; gap: 4px; padding: 12px 6px; border-radius: 999px; border: 1px solid var(--rule); background: linear-gradient(var(--paper-2), var(--paper-3)); color: var(--ink); cursor: pointer; font: inherit; }
+.wx-day[aria-selected="true"] { border: 2px solid var(--ink); background: var(--paper); }
+.wx-d-max { font-weight: 700; font-size: 17px; }
+.wx-d-min { color: var(--muted); font-size: 15px; }
+.wx-d-pop { font-size: 13px; color: var(--accent); min-height: 16px; }
+.wx-d-name { font-weight: 500; }
+.wx-d-date { font-size: 13px; color: var(--muted); }
+.wx-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+.wx-tile { padding: 16px 18px; border-radius: var(--radius); background: linear-gradient(var(--paper-2), var(--paper-3)); box-shadow: var(--edge-light), var(--shadow-panel); display: flex; flex-direction: column; align-items: center; text-align: center; min-width: 0; }
+.wx-tile h3 { margin: 0 0 6px; font-size: 15px; font-weight: 500; color: var(--muted); align-self: flex-start; }
+.wx-big { margin: 10px 0 4px; font-family: var(--display); font-size: 52px; line-height: 1; letter-spacing: -0.04em; }
+.wx-big small { font-size: 20px; letter-spacing: 0; color: var(--ink-2); }
+.wx-label { margin: 6px 0 0; font-size: 15px; }
+.wx-tile-note { margin: auto 0 0; padding-top: 10px; font-size: 12px; color: var(--muted); }
+.wx-dial { width: 120px; height: auto; }
+.wx-sun { width: 100%; max-width: 220px; height: auto; margin-top: 8px; }
+.wx-seg { position: relative; display: grid; grid-auto-flow: column; gap: 3px; width: 100%; max-width: 200px; height: 8px; margin-top: 10px; }
+.wx-seg span { border-radius: 4px; }
+.wx-seg i { position: absolute; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; background: var(--paper); border: 3px solid var(--ink); }
+.wx-dew { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: var(--good-bg); color: var(--good); font-weight: 600; margin-right: 6px; }
+@media (max-width: 699px) {
+  .wx-now { grid-template-columns: minmax(0, 1fr) auto; }
+  .wx-sub { grid-column: 1 / -1; text-align: left; }
+  .wx-temp { font-size: 80px; }
+  .wx-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .wx-tile { padding: 12px; }
+  .wx-big { font-size: 38px; }
+}
+
 /* Écran ambiant la nuit : luminosité réduite pour ne pas éclairer la pièce */
 :root[data-ambient="dim"] body { filter: brightness(0.62); }
 
