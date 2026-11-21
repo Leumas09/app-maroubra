@@ -37,6 +37,38 @@ export function predictOverhead(a: { lat: number; lon: number; track: number | n
   return best.d <= 1.5 && best.m >= 0.5 ? { inMin: Math.round(best.m), closestKm: Math.round(best.d * 10) / 10 } : null;
 }
 
+/**
+ * Survol prévu en tenant compte du virage en cours : le taux de virage est mesuré sur les dernières
+ * positions de la trace (relevés toutes les 10 s), plafonné à 3,5 °/s, et le virage s'arrête après 120°
+ * (un avion qui tourne vers la finale finit par s'aligner). Sans virage net, c'est la ligne droite.
+ */
+export function predictOverheadTurning(a: { lat: number; lon: number; track: number | null; speedKt: number | null; trail: [number, number][] }, home = SITE, pollS = 10): Aircraft["overhead"] {
+  if (a.track == null || !a.speedKt || a.speedKt < 60) return null;
+  const tr = a.trail;
+  let rate = 0;
+  if (tr.length >= 5) {
+    const p = tr.slice(-5);
+    const h1 = bearingDeg(p[0][0], p[0][1], p[2][0], p[2][1]), h2 = bearingDeg(p[2][0], p[2][1], p[4][0], p[4][1]);
+    const moved = distanceKm(p[0][0], p[0][1], p[4][0], p[4][1]);
+    const turn = ((h2 - h1 + 540) % 360) - 180;
+    if (moved > 0.3) rate = Math.max(-3.5, Math.min(3.5, turn / (2 * pollS)));
+    if (Math.abs(rate) < 0.4) rate = 0;
+  }
+  if (!rate) return predictOverhead(a, home);
+  const kmPerS = (a.speedKt * 1.852) / 3600;
+  let lat = a.lat, lon = a.lon, hdg = a.track, turned = 0;
+  let best = { d: distanceKm(lat, lon, home.lat, home.lon), m: 0 };
+  const step = 5;
+  for (let t = step; t <= 8 * 60; t += step) {
+    if (Math.abs(turned) < 120) { hdg = (hdg + rate * step + 360) % 360; turned += rate * step; }
+    const prev: [number, number] = [lat, lon];
+    [lat, lon] = destination(lat, lon, hdg, kmPerS * step);
+    const d = segmentMinKm(prev, [lat, lon], home);
+    if (d < best.d) best = { d, m: t / 60 };
+  }
+  return best.d <= 1.5 && best.m >= 0.5 ? { inMin: Math.round(best.m), closestKm: Math.round(best.d * 10) / 10 } : null;
+}
+
 /** Mode de pistes : direction des avions en finale (bas, en descente, alignés, près de l'aéroport). */
 export function runwayMode(acs: Aircraft[]): Flights["runway"] {
   const votes: Record<string, number> = {};

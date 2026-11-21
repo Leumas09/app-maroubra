@@ -210,6 +210,8 @@ th { color: var(--muted); font-weight: 500; }
   .gauge-label { font-size: 13px; }
   .gauge-sub { font-size: 12px; }
   .chart-scroll .chart { min-width: 760px; }
+  .live-table .target { display: none; }
+  .pill { white-space: nowrap; }
   .huge { font-size: 56px; }
   .lede { font-size: 22px; }
 }

@@ -16,8 +16,8 @@ export async function fetchJson<T = unknown>(url: string, init: RequestInit & { 
   return JSON.parse(text) as T;
 }
 
-export async function fetchBytes(url: string, timeoutMs = 30_000): Promise<ArrayBuffer> {
-  const res = await fetch(url, { headers: { "User-Agent": UA }, signal: AbortSignal.timeout(timeoutMs) });
+export async function fetchBytes(url: string, timeoutMs = 30_000, headers: Record<string, string> = {}): Promise<ArrayBuffer> {
+  const res = await fetch(url, { headers: { "User-Agent": UA, ...headers }, signal: AbortSignal.timeout(timeoutMs) });
   if (!res.ok) throw new Error(`${res.status} for ${new URL(url).host}`);
   return res.arrayBuffer();
 }

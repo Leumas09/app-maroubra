@@ -47,11 +47,13 @@ export function bz2Streams(buf: Uint8Array): Uint8Array[] {
   return starts.map((s, k) => buf.subarray(s, starts[k + 1] ?? buf.length));
 }
 
-/** Décompresse le début d'un segment, jusqu'à la ligne `maxLine` incluse. */
-export function decodeHead(bz: Uint8Array, maxLine = MAX_LINE): Uint8Array {
+/** Décompresse le début d'un segment, jusqu'à la ligne `maxLine` incluse. Lève une erreur s'il manque des octets. */
+export function decodeHead(bz: Uint8Array, maxLine = MAX_LINE, complete = true): Uint8Array {
   const parts: Buffer[] = [];
   let have = 0, need = Infinity;
-  for (const st of bz2Streams(bz)) {
+  const streams = bz2Streams(bz);
+  // Téléchargement partiel : le dernier flux est sans doute tronqué, on l'écarte.
+  for (const st of complete ? streams : streams.slice(0, -1)) {
     const out = Bunzip.decode(Buffer.from(st.buffer, st.byteOffset, st.byteLength), null, false);
     parts.push(out);
     have += out.length;
@@ -67,6 +69,7 @@ export function decodeHead(bz: Uint8Array, maxLine = MAX_LINE): Uint8Array {
     }
     if (have >= need) break;
   }
+  if (have < need) throw new Error("HSD: not enough data for the lines needed");
   return Buffer.concat(parts);
 }
 
@@ -269,8 +272,13 @@ export interface SatelliteState { data: Satellite; png: Buffer }
 export async function satelliteAt(slot: string, sunriseAz: number | null): Promise<SatelliteState> {
   const segs: Hsd[] = [];
   for (const s of SEGMENTS) {
-    const bz = new Uint8Array(await fetchBytes(slotFile(slot, s).url, 60_000));
-    segs.push(decodeHsd(decodeHead(bz)));
+    // Les lignes utiles sont dans les deux premiers flux (environ 750 ko) : requête partielle d'1,2 Mo,
+    // puis le fichier entier en secours si les flux étaient plus gros que d'habitude.
+    const url = slotFile(slot, s).url;
+    let head: Uint8Array;
+    try { head = decodeHead(new Uint8Array(await fetchBytes(url, 60_000, { Range: "bytes=0-1199999" })), MAX_LINE, false); }
+    catch { head = decodeHead(new Uint8Array(await fetchBytes(url, 60_000))); }
+    segs.push(decodeHsd(head));
   }
   const grid = localGrid(segs);
   const scene = clearRef(grid);

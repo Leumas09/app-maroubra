@@ -79,13 +79,13 @@ function Live({ e }: { e: E<Verification> }) {
         <div className="card-head"><h2>Live, last {v?.windowDays ?? 30} days</h2><Fresh e={e} label="Checked" /></div>
         {!v ? <p className="muted" style={{ margin: 0 }}>Waiting for the first check of the archive.</p> : (
           <div style={{ overflowX: "auto" }}>
-            <table>
-              <thead><tr><th scope="col">Check</th><th scope="col">Target</th><th scope="col">Result</th><th scope="col">Status</th></tr></thead>
+            <table className="live-table">
+              <thead><tr><th scope="col">Check</th><th scope="col" className="target">Target</th><th scope="col">Result</th><th scope="col">Status</th></tr></thead>
               <tbody>
                 {v.scores.map((s) => (
                   <tr key={s.key}>
                     <td>{s.title}<div className="muted" style={{ fontSize: 12 }}>{s.judge}{s.since ? `, since ${shortDate(new Date(s.since))}` : ""}</div></td>
-                    <td>{s.target}</td>
+                    <td className="target">{s.target}</td>
                     <td>{s.result}</td>
                     <td><span className={`pill ${STATUS[s.status][0]}`}>{STATUS[s.status][1]}</span></td>
                   </tr>
