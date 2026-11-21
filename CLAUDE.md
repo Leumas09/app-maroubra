@@ -21,7 +21,7 @@ Commandes : `npm test` (tous les tests), `apps/hub/scripts/demo.sh start` (hubs 
 ## Règles
 
 - Secrets acceptés par Samuel : mot de passe familial, clé de session, clé privée VAPID, uniquement comme secrets de la Container App. Jamais dans le dépôt, ni dans les tests (mot de passe de test : `test-family-password`).
-- Tout en Bicep (`infra/`). Pour chaque déploiement : build, what-if, résumé en français, puis OK de Samuel avant d'appliquer.
+- Tout en Bicep (`infra/`). Pour chaque déploiement d'infra (Bicep) : build, what-if, résumé en français, puis OK de Samuel avant d'appliquer.
 - Tag `project=maroubra` sur chaque ressource, dans `rg-app-maroubra`. Ne jamais modifier le socle `rg-kiwi-apps`.
 - Chaque prévision affichée a un juge extérieur (observation, référence indépendante) ; un objectif manqué reste visible dans le Track record.
 - Interface en anglais ; documentation et code commentés en français, sans tiret cadratin.
@@ -31,3 +31,4 @@ Commandes : `npm test` (tous les tests), `apps/hub/scripts/demo.sh start` (hubs 
   - Fusion : dès que la CI est verte et qu'il n'y a ni conflit ni relecture bloquante, fusion dans `main` (commit de fusion).
   - Mise en production : la fusion déclenche le workflow `deploy` ; suivre le run jusqu'au bout, vérifier la version servie, corriger et refusionner si le déploiement échoue.
   - Seule exception : un changement d'infra (Bicep) garde la règle du what-if, du résumé en français et de l'OK de Samuel avant d'appliquer.
+  - Rappelé par Samuel le 22 novembre 2026 : sans changement d'infra, ouvrir la PR, la fusionner et mettre en production se font sans lui demander son accord.
