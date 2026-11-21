@@ -1,4 +1,5 @@
-import type { AirQuality, Metar, SourceEntry, Weather as W } from "@maroubra/core";
+import type { AirQuality, Metar, Satellite, SourceEntry, Weather as W } from "@maroubra/core";
+import { cloudText, SatelliteMap } from "../components/SatelliteMap";
 import { CardHead, Empty, Fresh, WxIcon, wxText } from "../components/bits";
 import { compass, shortDate, time } from "../lib/format";
 
@@ -33,7 +34,7 @@ function HourChart({ w }: { w: W }) {
   );
 }
 
-export function Weather({ e, metar, air, night }: { e: E<W>; metar: E<Metar>; air: E<AirQuality>; night: boolean }) {
+export function Weather({ e, metar, air, sat, night }: { e: E<W>; metar: E<Metar>; air: E<AirQuality>; sat: E<Satellite>; night: boolean }) {
   const w = e?.data;
   if (!w) return <section className="card"><CardHead title="Weather"><Fresh e={e} /></CardHead><Empty>Waiting for the forecast.</Empty></section>;
   const c = w.current;
@@ -67,6 +68,14 @@ export function Weather({ e, metar, air, night }: { e: E<W>; metar: E<Metar>; ai
         </p>
       )}
       <div className="grid">
+        {sat?.data && (
+          <div className="card">
+            <CardHead title={`Clouds from space, ${time(new Date(sat.data.at))}`}><Fresh e={sat} label="Image" /></CardHead>
+            <SatelliteMap s={sat.data} />
+            <p style={{ margin: "10px 0 0", lineHeight: 1.45 }}>{cloudText(sat.data)}</p>
+            <p className="note">Infrared, day and night: the higher and colder the cloud top, the whiter. Thin high cloud and low fog can be missed.</p>
+          </div>
+        )}
         <div className="card">
           <h2>Next 7 days</h2>
           <ul className="list days">

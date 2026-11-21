@@ -14,13 +14,14 @@
     "@azure/data-tables": "13.3.1",
     "@azure/identity": "4.13.0",
     "@hono/node-server": "1.19.5",
+    "@maroubra/core": "0.1.0",
     "@maroubra/sky": "0.1.0",
     "fast-xml-parser": "5.3.0",
     "hono": "4.10.4",
     "hyparquet": "1.20.1",
     "satellite.js": "6.0.1",
-    "web-push": "3.6.7",
-    "@maroubra/core": "0.1.0"
+    "seek-bzip": "2.0.0",
+    "web-push": "3.6.7"
   },
   "devDependencies": {
     "@types/node": "22.18.12",

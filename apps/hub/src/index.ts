@@ -1,6 +1,6 @@
 import { serve } from "@hono/node-server";
 import type { Beach, Buoy, Fires, Flights, Iss, Marine, Moment, SpaceWeather, Sunrise, Weather } from "@maroubra/core";
-import { archiveHour, archiveOutcome, archiveReader, archiveVote, memoryArchive, tableArchive, type ArchiveTable } from "./archive";
+import { archiveHour, archiveOutcome, archiveSunriseSky, archiveReader, archiveVote, memoryArchive, tableArchive, type ArchiveTable } from "./archive";
 import { startCollectors, type Collector } from "./collector";
 import { loadConfig } from "./config";
 import { beach } from "./derive/beach";
@@ -16,6 +16,7 @@ import { flightsCollector } from "./sources/flights";
 import { air, fires, space } from "./sources/hazards";
 import { issCollector } from "./sources/iss";
 import { newsCollector } from "./sources/news";
+import { satelliteCollector } from "./sources/himawari";
 import { buoy, buoyForecast, marine } from "./sources/sea";
 import { airportForecast, metar, weather } from "./sources/weather";
 import { Store } from "./store";
@@ -34,6 +35,9 @@ await push?.load();
 const archiveClient = table(cfg.tableEndpoint, "archive", cfg.managedIdentityClientId);
 const archive: ArchiveTable | null = archiveClient ? tableArchive(archiveClient) : cfg.offline ? null : memoryArchive();
 const loadArchive = archive ? archiveReader(archive) : null;
+
+// Dernière image satellite, servie par /api/satellite.png.
+let satellitePng: Buffer | null = null;
 
 const tideNext = (now: Date) => {
   const e = tide.find((x) => x.t * 1000 > now.getTime());
@@ -82,17 +86,19 @@ const derived: Collector[] = [
 ];
 
 const collectors: Collector[] = [
-  weather, metar, marine, buoy, airportForecast, buoyForecast, flightsCollector((o) => void archiveOutcome(archive, o)), fires, air, space, issCollector(), sunrise, newsCollector(llm), ...derived,
+  weather, metar, marine, buoy, airportForecast, buoyForecast, flightsCollector((o) => void archiveOutcome(archive, o)),
+  satelliteCollector({ onImage: (png) => { satellitePng = png; }, onSunrise: (s) => void archiveSunriseSky(archive, s) }), fires, air, space, issCollector(), sunrise, newsCollector(llm), ...derived,
 ];
 startCollectors(store, collectors, { offline: cfg.offline });
 
 // Mode démonstration : uniquement hors ligne, pour les tests de bout en bout et les captures.
 const demoPath = process.env.DEMO_SNAPSHOT;
 if (cfg.offline && demoPath) {
-  const { readFileSync } = await import("node:fs");
+  const { existsSync, readFileSync } = await import("node:fs");
   const demo = JSON.parse(readFileSync(demoPath, "utf8")) as Record<string, unknown>;
   store.demo = true;
   for (const [id, d] of Object.entries(demo)) store.success(id, d);
+  if (existsSync(`${demoPath}.png`)) satellitePng = readFileSync(`${demoPath}.png`);
 }
 
 // Archive horaire, première écriture 5 minutes après le démarrage.
@@ -101,7 +107,7 @@ if (archive && !cfg.offline) {
   setTimeout(() => { tick(); setInterval(tick, 3600e3); }, 5 * 60e3);
 }
 
-const app = createApp(cfg, store, { push: push ?? undefined, vote: (v) => archiveVote(archive, v) });
+const app = createApp(cfg, store, { push: push ?? undefined, vote: (v) => archiveVote(archive, v), satellite: () => satellitePng });
 serve({ fetch: app.fetch, port: cfg.port }, (info) => {
   console.log(JSON.stringify({ event: "listening", port: info.port, version: cfg.version, llm: !!llm, push: !!push, archive: !!archive }));
 });

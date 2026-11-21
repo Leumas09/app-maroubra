@@ -302,6 +302,22 @@ export function sunriseScore(forecasts: SunriseRow[], votes: VoteRow[]): LiveSco
   };
 }
 
+/** Score prévu la veille contre le score que les nuages vus par Himawari au lever auraient donné. */
+export function sunriseSkyScore(forecasts: SunriseRow[], seen: SunriseRow[]): LiveScore {
+  const fc = new Map(forecasts.map((f) => [f.date, f.score]));
+  const rows = seen.filter((s) => fc.has(s.date)).map((s) => ({ f: fc.get(s.date)!, o: s.score }));
+  const rho = rows.length >= 3 ? spearman(rows.map((r) => r.f), rows.map((r) => r.o)) : NaN;
+  const err = rows.length ? rows.reduce((a, r) => a + Math.abs(r.f - r.o), 0) / rows.length : NaN;
+  return {
+    key: "sunsky", title: "Sunrise clouds, seen from space", n: rows.length, since: seen.map((s) => s.date).sort()[0] ?? null,
+    judge: "Himawari-9 infrared at sunrise, along the sun's path",
+    target: "rank correlation of 0.6 or more",
+    status: status(rows.length, 10, rho >= 0.6),
+    result: rows.length ? `${Number.isFinite(rho) ? `ρ = ${r2(rho)}, ` : ""}${r2(err)} points apart on average` : "No sunrise judged yet",
+    detail: `Each sunrise, the clouds the satellite sees along the sun's path go through the same scoring as the forecast. ${rows.length < 10 ? `Needs ${10 - rows.length} more mornings.` : "This checks the cloud forecast; the family's votes check the beauty."} Infrared alone misses some thin high cloud and very low fog.`,
+  };
+}
+
 export interface ArchiveData {
   /** Prévision Open-Meteo au point de l'aéroport (juge sans décalage de lieu). */
   fcAirport: FcRow[];
@@ -313,6 +329,8 @@ export interface ArchiveData {
   buoy: ObsRow[];
   overhead: OverheadOutcome[];
   sunrise: SunriseRow[];
+  /** Score recalculé à partir des nuages vus par le satellite au lever. */
+  sunriseSky?: SunriseRow[];
   votes: VoteRow[];
 }
 
@@ -330,7 +348,7 @@ export function verify(d: ArchiveData, now = Date.now() / 1000): Verification {
     scores: [
       temp.score, wind.score, rainScore(fc, d.metar, now),
       wavesScore(atBuoy ? d.fcBuoy : d.fcMarine, d.buoy, now, atBuoy),
-      overheadScore(d.overhead, now), sunriseScore(d.sunrise, d.votes),
+      overheadScore(d.overhead, now), sunriseSkyScore(d.sunrise, d.sunriseSky ?? []), sunriseScore(d.sunrise, d.votes),
     ],
     correction: { temp: temp.correction, wind: wind.correction },
   };

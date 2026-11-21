@@ -18,7 +18,7 @@ const SSE_HEARTBEAT_MS = 15_000;
 
 export interface Vote { date: string; value: number; voter: string }
 
-export function createApp(cfg: Config, store: Store, deps: { push?: Push; vote?: (v: Vote) => Promise<void> } = {}) {
+export function createApp(cfg: Config, store: Store, deps: { push?: Push; vote?: (v: Vote) => Promise<void>; satellite?: () => Buffer | null } = {}) {
   const app = new Hono();
   const auth = new Auth(cfg.password!, cfg.sessionSecret);
   const limiter = new LoginLimiter();
@@ -121,6 +121,14 @@ export function createApp(cfg: Config, store: Store, deps: { push?: Push; vote?:
         unsubscribe();
       }
     });
+  });
+
+  // Dernière image satellite des nuages (Himawari-9), calculée par le hub.
+  app.get("/api/satellite.png", (c) => {
+    const png = deps.satellite?.();
+    if (!png) return c.json({ error: "no image yet" }, 404);
+    c.header("Cache-Control", "private, max-age=300");
+    return c.body(new Uint8Array(png), 200, { "Content-Type": "image/png" });
   });
 
   // Vote du matin sur le lever de soleil : le juge du score de lever de soleil.

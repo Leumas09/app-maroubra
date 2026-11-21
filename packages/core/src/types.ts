@@ -266,7 +266,7 @@ export interface LeadScore {
 }
 
 export interface LiveScore {
-  key: "temp" | "wind" | "waves" | "rain" | "overhead" | "sunrise";
+  key: "temp" | "wind" | "waves" | "rain" | "overhead" | "sunrise" | "sunsky";
   title: string;
   judge: string;
   target: string;
@@ -308,4 +308,21 @@ export interface OverheadOutcome {
   /** Distance minimale réellement atteinte, km (null si l'avion a disparu avant). */
   minKm: number | null;
   hit: boolean;
+}
+
+/** Nuages vus par le satellite au-dessus d'un point, en pourcentage du disque examiné. */
+export interface SatelliteCloud { low: number; mid: number; high: number; total: number }
+
+export interface Satellite {
+  /** Heure du créneau d'observation (ISO). */
+  at: string;
+  band: string;
+  /** Largeur de l'image, km (centrée sur Maroubra, nord en haut). */
+  spanKm: number;
+  /** Température du ciel clair retenue, K. */
+  clearK: number;
+  overhead: SatelliteCloud | null;
+  within50km: SatelliteCloud | null;
+  /** Nuages le long de l'azimut du lever de soleil, à 0, 30, 80 et 150 km. */
+  alongSunrise: { km: number; cloud: SatelliteCloud | null }[];
 }

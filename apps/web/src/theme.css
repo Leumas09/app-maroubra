@@ -20,6 +20,9 @@
   --warn-bg: oklch(93% 0.04 40);
   --miss-ink: oklch(45% 0.14 35);
   --sea: oklch(88% 0.04 210);
+  --sat-sea: oklch(36% 0.05 240);
+  --sat-land: oklch(44% 0.03 150);
+  --sat-coast: oklch(85% 0.02 220);
   --land: oklch(98.2% 0.008 82);
   --sky-top: oklch(84% 0.045 205);
   --sky-bottom: oklch(95% 0.02 195);
@@ -219,3 +222,6 @@ th { color: var(--muted); font-weight: 500; }
 .vote-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
 .vote .btn { min-height: 44px; padding: 0 18px; }
 .sub { color: var(--ink-2); }
+
+/* Image satellite : toujours sombre, de jour comme de nuit, pour que les nuages blancs se lisent. */
+.sat { border-radius: 14px; max-width: 640px; }

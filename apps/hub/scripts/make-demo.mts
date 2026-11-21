@@ -10,6 +10,7 @@ import { scoreSunrise } from "../src/derive/sunrise";
 import { loadTide } from "../src/derive/tide";
 import { sydneyHour, verify, type FcRow, type ObsRow } from "../src/derive/verify";
 import { applyCorrection } from "../src/derive/correct";
+import { clearRef, cloudAt, decodeHead, decodeHsd, localGrid, localRef, render } from "../src/sources/himawari";
 import { normalize, runwayMode, type RawAc } from "../src/sources/flights";
 import { parseFires } from "../src/sources/hazards";
 
@@ -88,5 +89,12 @@ const days = Array.from({ length: 6 }, (_, i) => new Date((T0 + (24 + i) * 86400
 const verification = verify({ fcAirport: fc, fcMaroubra: [], fcBuoy: fcB, fcMarine: [], metar: obs, buoy: obsB, overhead, sunrise: days.map((d, i) => ({ date: d, score: [7.5, 3, 5.5, 8, 2, 6][i] })), votes: days.map((d, i) => ({ date: d, value: [2, 0, 1, 2, 0, 1][i] })) }, nowS);
 const weatherShown = applyCorrection(weather, verification, at.getTime());
 
-writeFileSync(out, JSON.stringify({ verify: verification, weather: weatherShown, metar, marine, buoy, flights, fires, air, space, iss, sunrise, news, beach: b, moments: ms, brief }));
+// Image satellite : le vrai fichier Himawari du 21/11/2026 12:00 UTC (fixture des tests), horodaté à l'heure de la démo.
+const seg = decodeHsd(decodeHead(readFileSync(new URL("../test/fixtures/himawari-b13-s0910-20261121-1200-head.bz2", import.meta.url))));
+const grid = localGrid([seg]);
+const scene = clearRef(grid), ref = localRef(grid, scene);
+writeFileSync(`${out}.png`, render(grid, ref));
+const satellite = { at: new Date(at.getTime() - 20 * 60e3).toISOString(), band: "B13 infrared 10.4 µm", spanKm: 300, clearK: scene, overhead: cloudAt(grid, ref, 0, 0, 10), within50km: cloudAt(grid, ref, 0, 0, 50), alongSunrise: [] };
+
+writeFileSync(out, JSON.stringify({ satellite, verify: verification, weather: weatherShown, metar, marine, buoy, flights, fires, air, space, iss, sunrise, news, beach: b, moments: ms, brief }));
 console.log(out, "beach", b.score, b.label, "moments", ms.length, "fires", fires.nearby.length, "brief:", brief.text);
