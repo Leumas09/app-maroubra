@@ -1,18 +1,34 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy as reactLazy, Suspense, useEffect, useMemo, useState } from "react";
+import type * as React from "react";
 import type { AirQuality, Beach as BeachData, Brief, Buoy, Fires, Flights, Iss, Marine, Metar, Moment, News as NewsData, Satellite, SpaceWeather, Sunrise, Verification, Weather as WeatherData } from "@maroubra/core";
 import { data, entry, isDemo, useLive } from "./lib/live";
 import type { SkyModel } from "./lib/sky-model";
 import { loadTide, type TideTable } from "./lib/tide";
-import { Beach } from "./views/Beach";
 import { Home } from "./views/Home";
-import { FireAir } from "./views/FireAir";
-import { News } from "./views/News";
-import { Overhead } from "./views/Overhead";
-import { Settings } from "./views/Settings";
 import { Sky } from "./views/Sky";
-import { Sea } from "./views/Tide";
-import { TrackRecord } from "./views/TrackRecord";
-import { Weather } from "./views/Weather";
+// Vues secondaires chargées à la demande : l'accueil s'affiche sans attendre les cartes ni les tableaux.
+// Après un déploiement, un écran resté ouvert peut demander un fichier qui n'existe plus : on recharge
+// la page une fois (la nouvelle version arrive), sans boucle si le réseau est vraiment coupé.
+function lazy<T extends Record<string, unknown>>(load: () => Promise<T>, name: keyof T) {
+  return reactLazy(() => load().then((m) => {
+    try { sessionStorage.removeItem("mb.reloaded"); } catch { /* ignoré */ }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return { default: m[name] as React.ComponentType<any> };
+  }).catch((err) => {
+    let again = false;
+    try { again = !sessionStorage.getItem("mb.reloaded"); sessionStorage.setItem("mb.reloaded", "1"); } catch { /* ignoré */ }
+    if (again) location.reload();
+    throw err;
+  }));
+}
+const Beach = lazy(() => import("./views/Beach"), "Beach") as unknown as typeof import("./views/Beach")["Beach"];
+const FireAir = lazy(() => import("./views/FireAir"), "FireAir") as unknown as typeof import("./views/FireAir")["FireAir"];
+const News = lazy(() => import("./views/News"), "News") as unknown as typeof import("./views/News")["News"];
+const Overhead = lazy(() => import("./views/Overhead"), "Overhead") as unknown as typeof import("./views/Overhead")["Overhead"];
+const Settings = lazy(() => import("./views/Settings"), "Settings") as unknown as typeof import("./views/Settings")["Settings"];
+const Sea = lazy(() => import("./views/Tide"), "Sea") as unknown as typeof import("./views/Tide")["Sea"];
+const TrackRecord = lazy(() => import("./views/TrackRecord"), "TrackRecord") as unknown as typeof import("./views/TrackRecord")["TrackRecord"];
+const Weather = lazy(() => import("./views/Weather"), "Weather") as unknown as typeof import("./views/Weather")["Weather"];
 
 type View = "home" | "weather" | "beach" | "sea" | "sky" | "overhead" | "fire" | "news" | "track" | "settings";
 const VIEWS: View[] = ["home", "weather", "beach", "sea", "sky", "overhead", "fire", "news", "track", "settings"];
@@ -148,6 +164,7 @@ export function App() {
           {isDemo(snap) && <span className="pill miss">Sample data for testing, not live</span>}
           {snap && !connected && <span className="pill wait">Reconnecting…</span>}
         </div>
+        <Suspense fallback={<div className="card" style={{ minHeight: 320 }} aria-busy="true" />}>
         {current === "home" && <Home now={now} sky={sky} brief={brief?.text ?? null} beach={beach} weather={weather} buoy={buoy} marine={entry<Marine>(snap, "marine")} sunrise={entry<Sunrise>(snap, "sunrise")} space={entry<SpaceWeather>(snap, "space")} moments={moments} />}
         {current === "weather" && <Weather e={weather} metar={entry<Metar>(snap, "metar")} air={air} sat={entry<Satellite>(snap, "satellite")} night={!!night} />}
         {current === "beach" && <Beach e={beach} now={now} />}
@@ -158,6 +175,7 @@ export function App() {
         {current === "news" && <News e={news} now={now} />}
         {current === "track" && <TrackRecord live={entry<Verification>(snap, "verify")} />}
         {current === "settings" && <Settings ambient={ambient} setAmbient={setAmbient} />}
+        </Suspense>
       </main>
     </div>
   );
