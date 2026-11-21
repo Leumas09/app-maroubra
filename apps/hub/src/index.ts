@@ -1,7 +1,7 @@
 import { serve } from "@hono/node-server";
 import type { Beach, BeachStatus, Buoy, Fires, Flights, Iss, Marine, Moment, SpaceWeather, Sunrise, Weather } from "@maroubra/core";
 import { archiveHour } from "./archive";
-import { startCollectors, type Collector } from "./collector";
+import { startCollectors, Waiting, type Collector } from "./collector";
 import { loadConfig } from "./config";
 import { beach } from "./derive/beach";
 import { facts, writeBrief } from "./derive/brief";
@@ -42,7 +42,7 @@ const derived: Collector[] = [
     id: "beach", everyMs: 10 * 60e3, staleAfterMs: 2 * 3600e3,
     run: async ({ store: s, now }) => {
       const w = s.data<Weather>("weather");
-      if (!w) throw new Error("waiting for weather");
+      if (!w) throw new Waiting("weather");
       return beach(w, s.data<Marine>("marine"), s.data<Buoy>("buoy"), tide, now.getTime(), s.data<BeachStatus>("beachStatus"));
     },
   },
@@ -60,7 +60,7 @@ const derived: Collector[] = [
   {
     id: "brief", everyMs: 30 * 60e3, staleAfterMs: 2 * 3600e3,
     run: async ({ store: s, now }) => {
-      if (!s.data("weather")) throw new Error("waiting for weather");
+      if (!s.data("weather")) throw new Waiting("weather");
       return writeBrief(llm, facts(s.data<Weather>("weather"), s.data<Beach>("beach"), tideNext(now), s.data<Moment[]>("moments") ?? [], now), now);
     },
   },

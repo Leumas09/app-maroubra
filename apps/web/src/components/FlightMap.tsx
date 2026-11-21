@@ -17,10 +17,12 @@ const VIEW_RADIUS_M = 15_000;
 export type Base = "map" | "satellite" | "plain";
 
 const TILES: Record<Exclude<Base, "plain">, { url: (night: boolean) => string; attribution: string; max: number }> = {
+  // Carte OpenStreetMap standard (sans clé, usage léger permis avec crédit et en-tête Referer) ;
+  // la nuit, la feuille de style l'assombrit (filtre sur le calque des tuiles).
   map: {
-    url: (night) => `https://{s}.basemaps.cartocdn.com/${night ? "dark_all" : "light_all"}/{z}/{x}/{y}{r}.png`,
-    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions">CARTO</a>',
-    max: 18,
+    url: () => "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    max: 19,
   },
   satellite: {
     url: () => "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
@@ -55,6 +57,7 @@ export function FlightMap(p: Props) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const map = useRef<L.Map | null>(null);
   const tiles = useRef<L.TileLayer | null>(null);
+  const coast = useRef<L.GeoJSON | null>(null);
   const props = useRef(p);
   props.current = p;
 
@@ -63,8 +66,8 @@ export function FlightMap(p: Props) {
     const m = L.map(box.current!, { zoomControl: true, attributionControl: true, zoomAnimation: false, zoomSnap: 0.5, minZoom: 7, maxZoom: 17, worldCopyJump: false });
     m.fitBounds(L.latLng(HOME).toBounds(2 * VIEW_RADIUS_M));
     m.attributionControl.setPrefix(false);
-    // Trait de côte local, toujours là (hors ligne, et sous les tuiles pendant leur chargement).
-    L.geoJSON(land.geometry as never, { interactive: false, attribution: "Coastline © OpenStreetMap contributors", style: { stroke: true, color: "var(--rule)", weight: 1, fillColor: "var(--land)", fillOpacity: 1 } }).addTo(m);
+    // Trait de côte local, sans réseau : fond « Plain » seulement (au-dessus des tuiles, il masquerait la carte).
+    coast.current = L.geoJSON(land.geometry as never, { interactive: false, attribution: "Coastline © OpenStreetMap contributors", style: { stroke: true, color: "var(--rule)", weight: 1, fillColor: "var(--land)", fillOpacity: 1 } });
     for (const km of [5, 10, 20]) L.circle(HOME, { radius: km * 1000, interactive: false, color: "var(--accent)", opacity: 0.45, weight: 1, dashArray: "4 6", fill: false }).addTo(m);
     L.circleMarker(HOME, { radius: 6, color: "var(--paper)", weight: 3, fillColor: "var(--accent)", fillOpacity: 1, interactive: false }).addTo(m)
       .bindTooltip("Maroubra", { permanent: true, direction: "right", className: "map-tip home" });
@@ -93,12 +96,15 @@ export function FlightMap(p: Props) {
   useEffect(() => {
     const m = map.current!;
     tiles.current?.remove();
+    if (p.base === "plain") coast.current!.addTo(m);
+    else coast.current!.remove();
     tiles.current = null;
     if (p.base !== "plain") {
       const t = TILES[p.base];
-      tiles.current = L.tileLayer(t.url(p.night), { attribution: t.attribution, maxZoom: t.max, maxNativeZoom: t.max, subdomains: "abcd" }).addTo(m);
+      tiles.current = L.tileLayer(t.url(p.night), { attribution: t.attribution, maxZoom: t.max, maxNativeZoom: t.max, referrerPolicy: "strict-origin-when-cross-origin" }).addTo(m);
     }
     box.current!.dataset.base = p.base;
+    box.current!.dataset.night = p.night ? "1" : "";
   }, [p.base, p.night]);
 
   useEffect(() => {

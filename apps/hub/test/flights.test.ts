@@ -103,7 +103,7 @@ describe("route /api/aircraft/:hex/photo", () => {
   });
   it("autorise les tuiles de carte et les photos dans la CSP, rien d'autre", async () => {
     const csp = (await createApp(cfg, new Store()).request("/health")).headers.get("content-security-policy")!;
-    expect(csp).toContain("img-src 'self' data: blob: https://www.randwick.nsw.gov.au https://*.basemaps.cartocdn.com https://server.arcgisonline.com https://*.plnspttrs.net");
+    expect(csp).toContain("img-src 'self' data: blob: https://www.randwick.nsw.gov.au https://tile.openstreetmap.org https://server.arcgisonline.com https://*.plnspttrs.net");
     expect(csp).toContain("connect-src 'self';");
   });
 });
@@ -142,6 +142,27 @@ describe("source des positions : adsb.fi, adsb.lol en secours", () => {
       expect(calls.filter((h) => h === "api.adsb.lol").length).toBe(3); // 2 secours + 1 routeset
     } finally {
       vi.unstubAllGlobals();
+    }
+  });
+});
+
+describe("collecteurs dérivés en attente d'une entrée", () => {
+  it("n'affichent pas de panne et réessaient 15 s plus tard", async () => {
+    vi.useFakeTimers();
+    try {
+      const { startCollectors, Waiting } = await import("../src/collector");
+      const store = new Store();
+      let ready = false, runs = 0;
+      const stop = startCollectors(store, [{ id: "beach", everyMs: 10 * 60e3, staleAfterMs: 3600e3, run: async () => { runs++; if (!ready) throw new Waiting("weather"); return { ok: 1 }; } }]);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(store.health().beach).toMatchObject({ ok: false, error: null });
+      ready = true;
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(runs).toBe(2);
+      expect(store.health().beach.ok).toBe(true);
+      stop();
+    } finally {
+      vi.useRealTimers();
     }
   });
 });
