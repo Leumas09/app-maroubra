@@ -55,6 +55,44 @@ export function passes(tle: [string, string], from: Date, hours = 72, stepS = 20
   return out;
 }
 
+/** Lignes 1 et 2 d'un TLE de l'ISS, dans un texte au format TLE (Celestrak, ARISS) ou un JSON { line1, line2 }. */
+export function parseTle(body: string): [string, string] | null {
+  const t = body.trim();
+  if (t.startsWith("{")) {
+    try {
+      const j = JSON.parse(t) as { line1?: string; line2?: string };
+      return j.line1?.startsWith("1 25544") && j.line2?.startsWith("2 25544") ? [j.line1.trim(), j.line2.trim()] : null;
+    } catch {
+      return null;
+    }
+  }
+  const lines = t.split(/\r?\n/).map((l) => l.trim());
+  const l1 = lines.find((l) => l.startsWith("1 25544"));
+  const l2 = lines.find((l) => l.startsWith("2 25544"));
+  return l1 && l2 ? [l1, l2] : null;
+}
+
+/** Celestrak d'abord ; s'il est en panne ou limite les téléchargements répétés, ARISS puis l'API TLE publique. */
+const TLE_SOURCES = [
+  "https://celestrak.org/NORAD/elements/gp.php?CATNR=25544&FORMAT=TLE",
+  "https://live.ariss.org/iss.txt",
+  "https://tle.ivanstanojevic.me/api/tle/25544",
+];
+
+export async function fetchTle(get: (url: string) => Promise<string> = (u) => fetchText(u, { timeoutMs: 15_000 })): Promise<[string, string]> {
+  const errors: string[] = [];
+  for (const url of TLE_SOURCES) {
+    try {
+      const tle = parseTle(await get(url));
+      if (tle) return tle;
+      errors.push(`TLE ISS illisible (${new URL(url).host})`);
+    } catch (err) {
+      errors.push(String((err as Error).message ?? err));
+    }
+  }
+  throw new Error(errors.join("; "));
+}
+
 export function issCollector(): Collector<Iss> {
   let tle: { lines: [string, string]; at: number } | null = null;
   return {
@@ -63,11 +101,11 @@ export function issCollector(): Collector<Iss> {
     staleAfterMs: 24 * 3600e3,
     run: async ({ now }) => {
       if (!tle || now.getTime() - tle.at > 6 * 3600e3) {
-        const txt = (await fetchText("https://celestrak.org/NORAD/elements/gp.php?CATNR=25544&FORMAT=TLE")).trim().split(/\r?\n/);
-        const l1 = txt.find((l) => l.startsWith("1 "));
-        const l2 = txt.find((l) => l.startsWith("2 "));
-        if (!l1 || !l2) throw new Error("TLE ISS illisible");
-        tle = { lines: [l1, l2], at: now.getTime() };
+        try {
+          tle = { lines: await fetchTle(), at: now.getTime() };
+        } catch (err) {
+          if (!tle) throw err; // on garde l'ancien TLE tant qu'on en a un
+        }
       }
       const rec = sat.twoline2satrec(tle.lines[0], tle.lines[1]);
       const epochMs = Date.UTC(2000 + (rec.epochyr % 100), 0, 1) + (rec.epochdays - 1) * 86400e3;
