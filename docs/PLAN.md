@@ -485,3 +485,47 @@ Développé d'un seul tenant, sans phases imposées. Tout est testé localement 
 - Le dépôt est **public**, alors que la convention du socle le veut privé : décision de Samuel.
 - `main` n'est pas protégée : aucune relecture ni aucun check n'est imposé avant fusion.
 - Dans le dépôt du socle, `docs/droits.md` décrit encore une condition à 6 rôles.
+
+## Partie I : nuit du 21 au 22 novembre 2026
+
+Reprise de toute l'app avec `/be-ambitious`, sans validation intermédiaire (Samuel dort). Rien n'est déployé : tout est sur la branche `claude/zealous-mccarthy-c02vop`, et le déploiement attend l'OK de Samuel, comme le veut le socle. **Aucune ressource Azure nouvelle** : les ajouts utilisent la table `archive` existante et le réseau sortant de l'app.
+
+### I.1 Le but derrière le but, et ce que ça a changé
+
+Le barreau 3 du plan (« remplacer le rituel, et le prouver ») n'était pas en place : l'archive tournait depuis le 1er novembre, mais aucune prévision de production n'était jugée, et la page Track record ne montrait que le banc d'avant lancement. La nuit a donc visé **la preuve en continu**, puis l'**auto-correction** que cette preuve autorise, puis des **juges** pour les prévisions qui n'en avaient pas.
+
+| Type | Pourquoi |
+|---|---|
+| Altitude | L'écran doit prouver lui-même qu'il a raison, chaque jour, sans banc manuel. |
+| Depth | Partir des données brutes (METAR, bouée, traces ADS-B, images Himawari) et juger contre une observation, jamais contre soi. |
+| Range | Le métier du satellitaire (navigation géostationnaire, température de brillance) et celui du prévisionniste (MOS, score de Brier) entrent dans le hub. |
+
+### I.2 Ce qui est construit
+
+| Partie | Contenu | Juge |
+|---|---|---|
+| Track record vivant (`apps/hub/src/derive/verify.ts`) | Relu dans l'archive toutes les 3 h, 30 jours glissants : température et vent (MAE par échéance, IC 95 % par bootstrap par jours), pluie (score de Brier contre la climatologie de la fenêtre), vagues, annonces de survol, lever de soleil vu par satellite, lever de soleil vu par la famille | METAR YSSY, bouée MHL, traces ADS-B, Himawari-9, votes |
+| Correction apprise en ligne (`derive/correct.ts`) | Biais à moyenne décroissante (méthode NOAA, 10 jours) par tranche d'échéance et heure locale, lissé ; **rejouée sans fuite du futur** (une prévision émise à I n'est corrigée qu'avec les observations antérieures à I) ; appliquée à l'écran **seulement si elle bat le modèle brut sur 14 jours** ; valeurs brutes gardées (`tempRaw`, `windRaw`) et seules archivées | Le Track record vivant lui-même |
+| Archive enrichie | Tous les METAR des 3 dernières heures (avec la pluie), prévision Open-Meteo **au point de l'aéroport** et prévision de vagues **au point de la bouée** (juges sans décalage de lieu), score de lever de soleil émis la veille, issues des annonces de survol, votes, ciel vu par satellite au lever | Lecture compacte : 156 000 lignes relues en 0,6 s, vérifiées en 0,3 s, 25 Mo (mesuré en local) |
+| Juge des survols (`OverheadJudge`) | Chaque « overhead in N min » est suivi sur la trace réelle jusqu'à 3 min après l'heure prévue ; distance minimale calculée sur le segment entre deux relevés | Trace ADS-B |
+| Nuages vus de l'espace (`sources/himawari.ts`) | Lecteur HSD en TypeScript (bande 13, 2 km) ; requête partielle (1,2 Mo) et décodage des deux premiers flux bzip2 seulement (0,3 s) ; navigation géostationnaire CGMS ; ciel clair local (la terre froide la nuit ne passe plus pour du nuage) ; image dans Weather ; au lever du Soleil, nuages le long de son azimut passés dans la formule du score | Pixel de Maroubra : ligne 4459, comme Satpy dans le banc. Côte : le contraste terre et mer de 13 h est maximal à moins d'un pixel (1,5 km) |
+| Vote du matin | « This morning's sunrise: worth getting up for? » sur l'accueil, du lever à 11 h, une fois par appareil ; `POST /api/vote`, appareil anonymisé (empreinte SHA-256) | Les votes jugent le score de lever de soleil (rang de Spearman, objectif 0,6 sur 8 matins au moins) |
+| Moments du ciel et nuages | ISS et lever de Lune sur la mer tus si le ciel sera couvert (85 %), signalés dès 50 % ; nuit noire, planètes et titre du soir annotés | Tests unitaires |
+| Cartes | Côte GSHHG pleine résolution, découpée (Sutherland-Hodgman) et simplifiée (Douglas-Peucker) : le port de Sydney et Botany Bay apparaissent, les îlots parasites disparaissent | Comparaison visuelle, alignement satellite |
+| Téléphone | Graphiques larges ouverts sur ce qui compte (Soleil ou Lune, maison, instant présent) ; Track record compact | Captures Playwright, 0 débordement |
+| Fiabilité | Notifications déjà envoyées gardées dans Table Storage (pas de doublon au redéploiement) | Code relu |
+
+### I.3 Ce qui a été essayé et écarté (objectifs manqués, gardés visibles)
+
+| Essai | Résultat | Décision |
+|---|---|---|
+| Pluie dans 30 et 60 min par l'image satellite seule (nuages froids déplacés par corrélation croisée) | 1 063 images du 14 au 21/11 contre 395 METAR : CSI 0,35 au mieux, contre **0,47 pour la persistance** à 30 min (0,44 à 60 min) ; l'advection fait pire que l'image immobile. Les averses de la semaine venaient de nuages bas, aux sommets trop chauds pour l'infrarouge | Pas à l'écran ; inscrit comme manqué dans le Track record ; banc dans `apps/hub/scripts/backtest-nowcast.mts`, résultats dans `bench/results/nowcast_satellite_20261114_21.txt` |
+| Secteur d'horizon marin mesuré sur la côte GSHHG | GSHHG lisse la baie de Maroubra (environ 800 m) : sa ligne d'eau passe 785 m à l'est de la plage | Hypothèse 40° à 160° gardée, et affichée comme hypothèse |
+| Beachwatch (qualité de l'eau officielle) et radar RainViewer | Hôtes refusés par le réseau de cette session ; format impossible à vérifier | Pas codé à l'aveugle ; à faire depuis une session qui les joint |
+
+### I.4 Avant de déployer
+
+1. Relire la branche, puis fusionner dans `main` après OK : le workflow teste, construit et déploie. Pas de what-if nécessaire (aucun changement Bicep).
+2. Dans `/health`, trois sources nouvelles doivent passer à `ok: true` : `fc-airport`, `fc-buoy`, `satellite`, puis `verify`.
+3. Le Track record vivant montrera dès le premier passage les 3 semaines d'archive déjà accumulées (si l'archive a bien tourné depuis le 1er novembre), en jugeant la prévision Maroubra contre l'aéroport ; le point aéroport prendra le relais après 7 jours.
+4. La correction ne s'appliquera d'elle-même que lorsqu'elle aura battu le modèle brut sur 14 jours avec au moins 300 heures jugées.
