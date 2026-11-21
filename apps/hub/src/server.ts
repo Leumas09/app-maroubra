@@ -20,7 +20,9 @@ const SSE_HEARTBEAT_MS = 15_000;
 
 /** Hôtes d'images externes : webcams de Randwick, fonds de carte (OpenStreetMap, Esri), photos d'avions (Planespotters, airport-data.com, Wikimedia). */
 const IMG_HOSTS = "https://www.randwick.nsw.gov.au https://tile.openstreetmap.org https://server.arcgisonline.com https://*.plnspttrs.net https://*.planespotters.net " +
-  "https://image.airport-data.com https://airport-data.com https://upload.wikimedia.org https://thumb.wikimedia.org";
+  "https://image.airport-data.com https://airport-data.com https://upload.wikimedia.org https://thumb.wikimedia.org https://*.secdn.net";
+/** Flux vidéo des webcams de Randwick (HLS, servi par secdn.net). */
+const MEDIA_HOSTS = "https://*.secdn.net";
 
 export function createApp(cfg: Config, store: Store, deps: { push?: Push; photos?: PhotoFinder; area?: (lat: number, lon: number, nm: number) => Promise<Aircraft[]>; history?: FlightHistory } = {}) {
   const app = new Hono();
@@ -38,7 +40,7 @@ export function createApp(cfg: Config, store: Store, deps: { push?: Push; photos
     c.header(
       "Content-Security-Policy",
       `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: ${IMG_HOSTS}; ` +
-        `font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'`,
+        `font-src 'self' data:; connect-src 'self' ${MEDIA_HOSTS}; media-src 'self' blob: ${MEDIA_HOSTS}; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'`,
     );
   });
 

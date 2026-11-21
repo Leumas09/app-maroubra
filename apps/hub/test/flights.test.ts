@@ -107,7 +107,7 @@ describe("route /api/aircraft/:hex/photo", () => {
   it("autorise les tuiles de carte et les photos dans la CSP, rien d'autre", async () => {
     const csp = (await createApp(cfg, new Store()).request("/health")).headers.get("content-security-policy")!;
     expect(csp).toContain("img-src 'self' data: blob: https://www.randwick.nsw.gov.au https://tile.openstreetmap.org https://server.arcgisonline.com https://*.plnspttrs.net");
-    expect(csp).toContain("connect-src 'self';");
+    expect(csp).toContain("connect-src 'self' https://*.secdn.net;");
   });
 });
 

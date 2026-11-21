@@ -4,6 +4,8 @@ import type { Beach, BeachReason, SwimHour } from "@maroubra/core";
 import { compass, time } from "../lib/format";
 import { curve, type TideTable } from "../lib/tide";
 
+/** Pastille du score dans le ruban horaire : couleurs claires et texte foncé, comme l'UV. */
+const scorePill = (s: number) => (s >= 8 ? "oklch(76% 0.14 150)" : s >= 6.5 ? "oklch(82% 0.09 190)" : s >= 5 ? "oklch(86% 0.13 95)" : "oklch(72% 0.15 30)");
 export const scoreColor = (s: number) => (s >= 8 ? "var(--good)" : s >= 6.5 ? "var(--accent)" : s >= 5 ? "var(--sun)" : "var(--alert)");
 const sideColor = (side: SwimHour["side"]) => (side === "offshore" ? "var(--good)" : side === "onshore" ? "var(--alert)" : "var(--muted)");
 const rad = (d: number) => (d * Math.PI) / 180;
@@ -147,22 +149,10 @@ export function DayRibbon({ b, now, tide }: { b: Beach; now: Date; tide: TideTab
   const W = 1000, L = 92, R = 12;
   const cw = (W - L - R) / hrs.length;
   const cx = (i: number) => L + i * cw + cw / 2;
-  const lanes = { day: 14, score: 40, scoreH: 112, wind: 186, windV: 216, surf: 230, surfH: 38, tide: 304, tideH: 34, uv: 372, hour: 400 };
-  const H = 410;
-  const ys = (s: number) => lanes.score + lanes.scoreH - (s / 10) * lanes.scoreH;
-  // Courbe lissée (Catmull-Rom vers Bézier) passant par chaque heure.
-  const P = hrs.map((h, i) => [cx(i), ys(h.score)] as const);
+  // Lignes du haut vers le bas : vent, houle, marée, UV, puis le score en pastilles (un calcul, pas une mesure).
+  const lanes = { day: 14, top: 28, wind: 52, windV: 82, surf: 96, surfH: 38, tide: 170, tideH: 34, uv: 250, score: 278, hour: 306 };
+  const H = 316;
   const breaks = hrs.map((h, i) => i > 0 && h.t - hrs[i - 1].t > 3600);
-  const segs: (readonly [number, number])[][] = [];
-  P.forEach((p, i) => { if (!i || breaks[i]) segs.push([]); segs.at(-1)!.push(p); });
-  const smooth = (s: (readonly [number, number])[]) => s.map((p, i) => {
-    if (!i) return `M${p[0].toFixed(1)},${p[1].toFixed(1)}`;
-    const p0 = s[i - 2] ?? s[i - 1], p1 = s[i - 1], p3 = s[i + 1] ?? p;
-    const c1 = [p1[0] + (p[0] - p0[0]) / 6, p1[1] + (p[1] - p0[1]) / 6];
-    const c2 = [p[0] - (p3[0] - p1[0]) / 6, p[1] - (p3[1] - p1[1]) / 6];
-    return `C${c1[0].toFixed(1)},${c1[1].toFixed(1)} ${c2[0].toFixed(1)},${c2[1].toFixed(1)} ${p[0].toFixed(1)},${p[1].toFixed(1)}`;
-  }).join(" ");
-  const base = lanes.score + lanes.scoreH;
   const bi = b.best ? hrs.findIndex((h) => h.t === b.best!.start) : -1;
   const be = b.best ? hrs.findIndex((h) => h.t === b.best!.end - 3600) : -1;
   const nowI = hrs.findIndex((h) => now.getTime() / 1000 < h.t + 3600);
@@ -198,31 +188,15 @@ export function DayRibbon({ b, now, tide }: { b: Beach; now: Date; tide: TideTab
   );
   return (
     <svg className="chart ribbon" viewBox={`0 0 ${W} ${H}`} role="img"
-      aria-label={`Hour by hour: swim score, wind, surf, tide and UV.${b.best ? ` Best window ${time(new Date(b.best.start * 1000))} to ${time(new Date(b.best.end * 1000))}.` : ""}`}>
-      <defs>
-        <linearGradient id="score-fill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="var(--accent)" stopOpacity="0.32" />
-          <stop offset="1" stopColor="var(--accent)" stopOpacity="0.02" />
-        </linearGradient>
-      </defs>
+      aria-label={`Hour by hour: wind, surf, tide, UV and swim score.${b.best ? ` Best window ${time(new Date(b.best.start * 1000))} to ${time(new Date(b.best.end * 1000))}.` : ""}`}>
       {bi >= 0 && (
         <g>
-          <rect x={L + bi * cw + 2} y={lanes.score - 10} width={((be >= 0 ? be : bi) - bi + 1) * cw - 4} height={H - lanes.score - 4} rx="12" fill="var(--accent)" opacity="0.1" />
-          <text x={L + bi * cw + 8} y={lanes.score + lanes.scoreH - 6} fontSize="12" fontWeight="700" fill="var(--accent)">BEST</text>
+          <rect x={L + bi * cw + 2} y={lanes.top - 6} width={((be >= 0 ? be : bi) - bi + 1) * cw - 4} height={H - lanes.top - 2} rx="12" fill="var(--accent)" opacity="0.1" />
+          <text x={L + bi * cw + 8} y={lanes.top + 4} fontSize="11" fontWeight="700" fill="var(--accent)">BEST</text>
         </g>
       )}
-      {[5, 8].map((s) => <line key={s} x1={L} x2={W - R} y1={ys(s)} y2={ys(s)} stroke="var(--rule)" strokeDasharray="3 6" />)}
-      {laneLabel(lanes.score + 40, "Swim score", "out of 10")}
-      {segs.map((s, i) => (
-        <g key={i}>
-          <path d={`${smooth(s)} L${s.at(-1)![0]},${base} L${s[0][0]},${base} Z`} fill="url(#score-fill)" />
-          <path d={smooth(s)} fill="none" stroke="var(--accent)" strokeWidth="3" />
-        </g>
-      ))}
       {hrs.map((h, i) => (
         <g key={h.t} opacity={h.t + 3600 < now.getTime() / 1000 ? 0.4 : 1}>
-          <circle cx={cx(i)} cy={ys(h.score)} r="5" fill={scoreColor(h.score)} stroke="var(--paper-2)" strokeWidth="2" />
-          <text x={cx(i)} y={ys(h.score) - 10} textAnchor="middle" fontSize="11" fontWeight="600" fill="var(--ink-2)">{h.score.toFixed(h.score >= 10 ? 0 : 1)}</text>
           <WindGlyph x={cx(i)} y={lanes.wind} h={h} />
           <text x={cx(i)} y={lanes.windV} textAnchor="middle" fontSize="11" fill="var(--muted)">{h.wind}</text>
           {h.surf != null && (
@@ -233,6 +207,8 @@ export function DayRibbon({ b, now, tide }: { b: Beach; now: Date; tide: TideTab
           )}
           <rect x={cx(i) - cw * 0.38} y={lanes.uv - 12} width={cw * 0.76} height="16" rx="5" fill={uvColor(h.uv)} opacity="0.9" />
           <text x={cx(i)} y={lanes.uv} textAnchor="middle" fontSize="11" fontWeight="600" fill="oklch(20% 0.02 80)">{Math.round(h.uv)}</text>
+          <rect x={cx(i) - cw * 0.42} y={lanes.score - 12} width={cw * 0.84} height="16" rx="5" fill={scorePill(h.score)} opacity="0.9" />
+          <text x={cx(i)} y={lanes.score} textAnchor="middle" fontSize="11" fontWeight="600" fill="oklch(20% 0.02 80)">{h.score.toFixed(h.score >= 10 ? 0 : 1)}</text>
           <text x={cx(i)} y={lanes.hour} textAnchor="middle" fontSize="12" fill="var(--muted)">{time(new Date(h.t * 1000)).slice(0, 2)}</text>
           {(i === 0 || breaks[i]) && <text x={L + i * cw + 4} y={lanes.day} fontSize="12" fontWeight="700" fill="var(--ink-2)">{day(h.t)}</text>}
           {breaks[i] && <line x1={L + i * cw} x2={L + i * cw} y1={4} y2={H - 4} stroke="var(--rule)" strokeWidth="2" />}
@@ -242,6 +218,7 @@ export function DayRibbon({ b, now, tide }: { b: Beach; now: Date; tide: TideTab
       {laneLabel(lanes.surf + 18, "Surf", "metres")}
       {laneLabel(lanes.tide + 16, "Tide")}
       {laneLabel(lanes.uv - 2, "UV")}
+      {laneLabel(lanes.score - 2, "Swim score")}
       {tidePaths.map((d, i) => <path key={i} d={d} fill="none" stroke="var(--accent)" strokeWidth="2.5" />)}
       {tideMarks.map((m) => (
         <text key={m.t.toISOString()} x={m.x} y={m.kind === "high" ? lanes.tide - 5 : lanes.tide + lanes.tideH + 15} textAnchor="middle" fontSize="11" fontWeight="600" fill="var(--ink-2)">
@@ -250,8 +227,8 @@ export function DayRibbon({ b, now, tide }: { b: Beach; now: Date; tide: TideTab
       ))}
       {nowX != null && (
         <g>
-          <line x1={nowX} x2={nowX} y1={lanes.score - 8} y2={H - 18} stroke="var(--alert)" strokeWidth="1.5" strokeDasharray="3 3" />
-          <text x={nowX + 4} y={lanes.score + lanes.scoreH + 14} fontSize="11" fontWeight="700" fill="var(--alert)">now</text>
+          <line x1={nowX} x2={nowX} y1={lanes.top - 4} y2={H - 18} stroke="var(--alert)" strokeWidth="1.5" strokeDasharray="3 3" />
+          <text x={nowX + 4} y={lanes.top + 4} fontSize="11" fontWeight="700" fill="var(--alert)">now</text>
         </g>
       )}
     </svg>

@@ -587,3 +587,12 @@ Demande de Samuel : les fonctions de Google Météo.
 - Tuiles : pluie du jour, vent et direction, qualité de l'air, UV, lever et coucher du soleil, visibilité, pression, humidité et point de rosée.
 
 Juge : pour « maintenant », visibilité, pression et point de rosée viennent du METAR de l'aéroport de Sydney (mesures). Les valeurs des jours suivants sont des prévisions Open-Meteo, **pas encore vérifiées dans le Track record** : à ajouter au job de vérification nocturne (lot G.3).
+
+## Partie O : Beach, score en pastilles et webcams en direct (21 novembre 2026)
+
+- Ruban horaire : la courbe du score de baignade, en tête, est retirée ; le score devient une ligne de pastilles colorées sous l'UV.
+- Webcams : la mairie de Randwick diffuse ses caméras par secdn.net (`maroubra_north`, `maroubra_south`, relevés sur sa page des webcams).
+  - Par défaut : l'image en direct publiée pour chaque caméra, renouvelée toutes les 30 s.
+  - « Play live video » tente le flux HLS (`randwickcc-hls.secdn.net/.../playlist.m3u8`, lecteur hls.js chargé à la demande) et revient à l'image s'il ne démarre pas en 12 s.
+  - Le lecteur de la mairie est derrière une vérification Cloudflare : l'adresse du flux vidéo n'a pas pu être confirmée depuis la session de développement. À vérifier en production.
+- CSP : `img-src`, `media-src` et `connect-src` acceptent `https://*.secdn.net`.
