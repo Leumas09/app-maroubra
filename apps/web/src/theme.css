@@ -204,6 +204,8 @@ th { color: var(--muted); font-weight: 500; }
   main { padding: 18px 16px 32px; }
   .home-head { grid-template-columns: minmax(0, 1fr); row-gap: 18px; }
   .home-foot { grid-template-columns: minmax(0, 1fr); row-gap: 24px; }
+  /* Sur petit écran, la pastille d'état passe en bas pour ne pas masquer la navigation. */
+  .status { top: auto; bottom: 14px; right: 14px; }
   /* Place réservée pour la phrase du jour : l'arrivée des données ne fait pas sauter l'écran. */
   .home-say h1 { min-height: calc(3 * 1.12em); }
 }
