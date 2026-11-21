@@ -6,6 +6,7 @@ import { Flag, officialStatus } from "../components/beach-status";
 import { CardHead, Empty, Fresh } from "../components/bits";
 import { compass, time } from "../lib/format";
 import type { TideTable } from "../lib/tide";
+import { useEffect, useRef, useState } from "react";
 import { SeaSection } from "./Tide";
 
 type E<T> = (SourceEntry<T> & { stale: boolean; ageMin: number | null }) | null;
@@ -103,36 +104,79 @@ function Instruments({ b, now, lifeguardTemp }: { b: B; now: Date; lifeguardTemp
   );
 }
 
-/** Webcams de la mairie : lien vers le direct, avec la photo du matin des sauveteurs quand elle existe. */
-function Cams({ photo, photoAt }: { photo: string | null; photoAt: string | null }) {
-  const cams = [
-    { id: "north", name: "Maroubra", where: "North end of the beach", photo },
-    { id: "south", name: "Maroubra South", where: "South end of the beach", photo: null },
-  ];
+/** Caméras de la mairie de Randwick (service vidéo secdn.net, adresses relevées sur leur page des webcams). */
+const CAM_BASE = "randwickcc-channel/play";
+const camImage = (id: string, tick: number) => `https://randwickcc-thumb.secdn.net/${CAM_BASE}/${id}/thumbnail.jpg?t=${tick}`;
+const camStream = (id: string) => `https://randwickcc-hls.secdn.net/${CAM_BASE}/${id}/playlist.m3u8`;
+
+/**
+ * Une caméra : image en direct de la mairie, renouvelée toutes les 30 s ; « Play live video » lance le flux
+ * vidéo (HLS) dans la page. Si la vidéo ne démarre pas en 12 s, on revient à l'image avec un message.
+ */
+function CamView({ id, name, where, offline }: { id: string; name: string; where: string; offline: boolean }) {
+  const [tick, setTick] = useState(() => Math.floor(Date.now() / 30e3));
+  const [mode, setMode] = useState<"image" | "loading" | "video" | "failed">("image");
+  const [broken, setBroken] = useState(false);
+  const video = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    if (mode !== "image" && mode !== "failed") return;
+    const t = setInterval(() => setTick(Math.floor(Date.now() / 30e3)), 30e3);
+    return () => clearInterval(t);
+  }, [mode]);
+  useEffect(() => {
+    if (mode !== "loading" && mode !== "video") return;
+    const v = video.current!;
+    let hls: { destroy: () => void } | null = null;
+    let done = false;
+    const fail = () => { if (!done) { done = true; hls?.destroy(); setMode("failed"); } };
+    const timer = setTimeout(fail, 12_000);
+    const ok = () => { done = true; clearTimeout(timer); setMode("video"); };
+    v.addEventListener("playing", ok, { once: true });
+    if (v.canPlayType("application/vnd.apple.mpegurl")) {
+      v.src = camStream(id);
+      v.play().catch(fail);
+    } else {
+      void import("hls.js").then(({ default: Hls }) => {
+        if (!Hls.isSupported()) return fail();
+        const h = new Hls({ lowLatencyMode: true });
+        hls = h;
+        h.on(Hls.Events.ERROR, (_e, data) => { if (data.fatal) fail(); });
+        h.loadSource(camStream(id));
+        h.attachMedia(v);
+        h.on(Hls.Events.MANIFEST_PARSED, () => { v.play().catch(fail); });
+      }).catch(fail);
+    }
+    return () => { clearTimeout(timer); v.removeEventListener("playing", ok); hls?.destroy(); v.removeAttribute("src"); v.load(); };
+  }, [mode === "loading" || mode === "video", id]);
+  const live = mode === "loading" || mode === "video";
+  return (
+    <div className="cam">
+      <div className="cam-view">
+        {offline ? <div className="cam-off">Live image (not loaded with sample data)</div> : live ? <video ref={video} muted playsInline autoPlay controls={mode === "video"} aria-label={`${name}, live video`} />
+          : broken ? <div className="cam-off">Camera image unavailable right now</div>
+            : <img src={camImage(id, tick)} alt={`${name}, live image from the council camera`} referrerPolicy="no-referrer" onError={() => setBroken(true)} onLoad={() => setBroken(false)} />}
+        {mode === "loading" && <span className="cam-live"><span className="dot" />Connecting…</span>}
+        {mode === "video" && <span className="cam-live"><span className="dot" />Live</span>}
+        {!live && !offline && <button className="cam-live cam-play" onClick={() => setMode("loading")}><span className="dot" />Play live video</button>}
+      </div>
+      <div className="cam-name">{name}</div>
+      <div className="cam-where">
+        {mode === "failed" ? "The live video would not start here; showing the live image, refreshed every 30 s." : mode === "video" ? where : `${where}. Live image, refreshed every 30 s.`}
+      </div>
+    </div>
+  );
+}
+
+function Cams({ photo, photoAt, offline }: { photo: string | null; photoAt: string | null; offline: boolean }) {
   return (
     <div className="card">
       <CardHead title="Live cams"><span className="fresh">Randwick City Council</span></CardHead>
       <div className="cams">
-        {cams.map((c) => (
-          <a key={c.id} className="cam" href={CAMS_PAGE} target="_blank" rel="noreferrer">
-            <div className="cam-view">
-              {c.photo ? <img src={c.photo} alt={`${c.name}, lifeguard photo`} loading="lazy" referrerPolicy="no-referrer" /> : (
-                <svg viewBox="0 0 320 180" aria-hidden="true" preserveAspectRatio="xMidYMid slice">
-                  <rect width="320" height="180" fill="var(--sky-bottom)" />
-                  <rect y="70" width="320" height="60" fill="var(--sea)" />
-                  {[84, 98, 112].map((y, i) => <path key={y} d={`M0 ${y} q40 -6 80 0 t80 0 t80 0 t80 0`} fill="none" stroke="var(--paper)" strokeOpacity={0.7 - i * 0.15} strokeWidth="2" />)}
-                  <path d="M0 130 Q160 112 320 124 V180 H0 Z" fill="var(--sand)" />
-                  <path d="M250 70 q30 -14 70 -10 v10 z" fill="var(--ink-2)" opacity="0.35" />
-                </svg>
-              )}
-              <span className="cam-live"><span className="dot" />Watch live</span>
-            </div>
-            <div className="cam-name">{c.name}</div>
-            <div className="cam-where">{c.photo && photoAt ? `Photo from the lifeguard report at ${time(new Date(photoAt))}` : c.where}</div>
-          </a>
-        ))}
+        <CamView id="maroubra_north" name="Maroubra" where="North end of the beach" offline={offline} />
+        <CamView id="maroubra_south" name="Maroubra South" where="South end of the beach" offline={offline} />
       </div>
-      <p className="note">The council cams can go offline in rough weather. Swellnet also runs a free Maroubra cam: <a href="https://www.swellnet.com/surfcams/maroubra" target="_blank" rel="noreferrer">swellnet.com</a>.</p>
+      {photo && <p className="note">Lifeguards' photo this morning ({photoAt ? time(new Date(photoAt)) : ""}): <a href={photo} target="_blank" rel="noreferrer">open</a>.</p>}
+      <p className="note">The council cams can go offline in rough weather. <a href={CAMS_PAGE} target="_blank" rel="noreferrer">Council cams page</a>. Swellnet also runs a free Maroubra cam: <a href="https://www.swellnet.com/surfcams/maroubra" target="_blank" rel="noreferrer">swellnet.com</a>.</p>
     </div>
   );
 }
@@ -143,9 +187,9 @@ function verdict(b: B, daylight: boolean, closed: boolean): string {
   return { Great: "Great for a swim right now.", Good: "Good for a swim right now.", Fair: "Fair: swimmable, with care.", Poor: "Poor conditions for a swim.", "Stay out": "Stay out of the water." }[b.label];
 }
 
-interface Props { e: E<B>; status: E<BeachStatus>; tide: TideTable | null; now: Date; buoy: E<Buoy>; marine: E<Marine> }
+interface Props { e: E<B>; status: E<BeachStatus>; tide: TideTable | null; now: Date; buoy: E<Buoy>; marine: E<Marine>; demo: boolean }
 
-export function Beach({ e, status, tide, now, buoy, marine }: Props) {
+export function Beach({ e, status, tide, now, buoy, marine, demo }: Props) {
   const b = e?.data;
   const official = <OfficialStatus e={status} now={now} />;
   const sea = <SeaSection table={tide} now={now} buoy={buoy} marine={marine} />;
@@ -201,7 +245,7 @@ export function Beach({ e, status, tide, now, buoy, marine }: Props) {
           <FactorBars reasons={b.reasons} score={b.score} />
           <p className="note">The score starts at 10; each factor takes points off, as a lifeguard would weigh it. Every forecast is checked in the Track record.</p>
         </div>
-        <Cams photo={lg?.today ? lg.photo : null} photoAt={lg?.at ?? null} />
+        <Cams photo={lg?.today ? lg.photo : null} photoAt={lg?.at ?? null} offline={demo} />
       </div>
       {sea}
     </section>

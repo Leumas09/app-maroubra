@@ -143,7 +143,7 @@ export function App() {
         </div>
         {current === "home" && <Home now={now} sky={sky} brief={brief?.text ?? null} beach={beach} beachStatus={beachStatus} weather={weather} buoy={buoy} marine={entry<Marine>(snap, "marine")} sunrise={entry<Sunrise>(snap, "sunrise")} space={entry<SpaceWeather>(snap, "space")} moments={moments} />}
         {current === "weather" && <Weather e={weather} metar={entry<Metar>(snap, "metar")} air={air} warnings={entry<WeatherWarnings>(snap, "warnings")} night={!!night} now={now} />}
-        {current === "beach" && <Beach e={beach} status={beachStatus} tide={tide} now={now} buoy={buoy} marine={entry<Marine>(snap, "marine")} />}
+        {current === "beach" && <Beach e={beach} status={beachStatus} tide={tide} now={now} buoy={buoy} marine={entry<Marine>(snap, "marine")} demo={isDemo(snap)} />}
         {current === "sky" && (sky ? <Sky s={sky} iss={entry<Iss>(snap, "iss")} space={entry<SpaceWeather>(snap, "space")} sunrise={entry<Sunrise>(snap, "sunrise")} /> : <div className="card" style={{ minHeight: 320 }} aria-busy="true" />)}
         {current === "overhead" && <Overhead e={flights} night={!!night} demo={isDemo(snap)} />}
         {current === "fire" && <FireAir fires={fires} />}
