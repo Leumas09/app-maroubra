@@ -1,0 +1,25 @@
+# Annonces « overhead in N min » contre les traces ADS-B réelles (adsb.lol, relevé toutes les 10 s)
+# Enregistrement du 21/11/2026 12:15 à 22:45 UTC (nuit puis matin à Sydney).
+# Règle « sans arrivées » établie sur la partie avant 20:50:20 UTC, puis figée et jugée sur la suite.
+
+## Toute la période (contient la partie qui a servi à régler la règle)
+28 survols réels à moins de 1,5 km
+ligne droite (avant)         annonces  58, confirmées  27 (47 %), survols annoncés 14/28 (50 %)
+ligne droite sans arrivées   annonces  35, confirmées  24 (69 %), survols annoncés 11/28 (39 %)
+virage mesuré sur la trace   annonces  64, confirmées  14 (22 %), survols annoncés 14/28 (50 %)
+
+## Partie hors échantillon (après 20:50:20 UTC)
+19 survols réels à moins de 1,5 km
+ligne droite (avant)         annonces  38, confirmées  18 (47 %), survols annoncés 5/19 (26 %)
+ligne droite sans arrivées   annonces  24, confirmées  15 (63 %), survols annoncés 2/19 (11 %)
+virage mesuré sur la trace   annonces  33, confirmées   5 (15 %), survols annoncés 5/19 (26 %)
+
+## Lecture
+- Hors échantillon, la règle fait passer la précision de 47 % à 63 % (objectif : 90 %, manqué).
+- Elle perd 3 vrais survols sur 18 : des arrivées longues venues de l'est (cap 271° et 276°, 8 900 ft,
+  passées à 0,4 et 0,25 km), sous le seuil de 9 000 ft et hors de la fenêtre 230° à 270°. Seuil et fenêtre
+  sont donc trop serrés ; à régler sur de nouvelles données, pas sur celles-ci.
+- Le matin du 21/11, les départs de la piste 07 (cap 87°, en montée vers 3 000 ft) survolent Maroubra
+  environ une minute après le décollage : annonce possible au mieux une minute avant, d'où le faible rappel.
+- Le virage mesuré sur la trace est nettement moins bon : écarté.
+- Le juge des annonces tourne désormais en production (Track record vivant) sur tout le trafic.

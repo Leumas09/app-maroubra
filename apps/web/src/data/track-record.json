@@ -85,6 +85,13 @@
       "target": "measured, not assumed",
       "result": "0.83 from the NE, 0.78 E, 0.62 SE, 0.46 S (the old fixed 0.8 overstated southerly swell)",
       "pass": true
+    },
+    {
+      "name": "“Overhead in N min”, ignoring aircraft still manoeuvring to land",
+      "judge": "Real ADS-B tracks, 21 Nov 2026; rule fixed before 07:50 Sydney time, judged on the morning traffic after it",
+      "target": "90% of announcements confirmed within 1.5 km",
+      "result": "63% confirmed (was 47%); 3 of 18 real overflights no longer announced",
+      "pass": false
     }
   ],
   "verifications": [
