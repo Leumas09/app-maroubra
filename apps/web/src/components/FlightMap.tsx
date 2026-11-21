@@ -50,6 +50,8 @@ interface Props {
   homeTick: number;
   /** Agrégateur des positions, crédité sur la carte. */
   source: string;
+  /** Zone visible (centre et rayon en km jusqu'au coin), à chaque fin de déplacement ou de zoom. */
+  onView: (v: { lat: number; lon: number; radiusKm: number }) => void;
 }
 
 export function FlightMap(p: Props) {
@@ -88,6 +90,12 @@ export function FlightMap(p: Props) {
     m.on("click", (e: L.LeafletMouseEvent) => { const h = hit(e.containerPoint); if (h) props.current.onPick(h); });
     m.on("mousemove", (e: L.LeafletMouseEvent) => { box.current!.style.cursor = hit(e.containerPoint) ? "pointer" : ""; });
     m.on("dragstart", () => props.current.onStopFollow());
+    const report = () => {
+      const c = m.getCenter(), ne = m.getBounds().getNorthEast();
+      props.current.onView({ lat: c.lat, lon: c.lng, radiusKm: c.distanceTo(ne) / 1000 });
+    };
+    m.on("moveend", report);
+    report();
     map.current = m;
     return () => { m.remove(); map.current = null; };
   }, []);

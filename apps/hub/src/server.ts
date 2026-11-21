@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { Auth, clientIp, COOKIE, LoginLimiter } from "./auth";
 import type { Config } from "./config";
 import { loginPage } from "./login-page";
+import type { Aircraft } from "@maroubra/core";
 import type { PhotoFinder } from "./photos";
 import type { Push } from "./push";
 import type { Store } from "./store";
@@ -19,7 +20,7 @@ const SSE_HEARTBEAT_MS = 15_000;
 /** Hôtes d'images externes : webcams de la mairie de Randwick, fonds de carte (OpenStreetMap, Esri) et photos d'avions (Planespotters). */
 const IMG_HOSTS = "https://www.randwick.nsw.gov.au https://tile.openstreetmap.org https://server.arcgisonline.com https://*.plnspttrs.net https://*.planespotters.net";
 
-export function createApp(cfg: Config, store: Store, deps: { push?: Push; photos?: PhotoFinder } = {}) {
+export function createApp(cfg: Config, store: Store, deps: { push?: Push; photos?: PhotoFinder; area?: (lat: number, lon: number, nm: number) => Promise<Aircraft[]> } = {}) {
   const app = new Hono();
   const auth = new Auth(cfg.password!, cfg.sessionSecret);
   const limiter = new LoginLimiter();
@@ -94,7 +95,7 @@ export function createApp(cfg: Config, store: Store, deps: { push?: Push; photos
 
   app.get("/api/state", (c) => {
     c.header("Cache-Control", "no-store");
-    return c.json(store.snapshot());
+    return c.json({ ...store.snapshot(), build: cfg.version });
   });
 
   app.get("/api/stream", (c) => {
@@ -102,7 +103,8 @@ export function createApp(cfg: Config, store: Store, deps: { push?: Push; photos
     c.header("X-Accel-Buffering", "no");
     return streamSSE(c, async (stream) => {
       const snap = store.snapshot();
-      await stream.writeSSE({ event: "snapshot", data: JSON.stringify(snap), id: String(snap.version), retry: 1000 });
+      // build : version servie ; l'app se recharge seule quand elle change (écran ambiant resté ouvert).
+      await stream.writeSSE({ event: "snapshot", data: JSON.stringify({ ...snap, build: cfg.version }), id: String(snap.version), retry: 1000 });
       const queue: string[] = [];
       let wake: (() => void) | null = null;
       const unsubscribe = store.subscribe((id, entry, version) => {
@@ -122,6 +124,19 @@ export function createApp(cfg: Config, store: Store, deps: { push?: Push; photos
         unsubscribe();
       }
     });
+  });
+
+  // Avions d'une zone (centre et rayon en milles nautiques), quand la carte sort des environs de la maison.
+  app.get("/api/aircraft/area", async (c) => {
+    const lat = Number(c.req.query("lat")), lon = Number(c.req.query("lon")), r = Number(c.req.query("r"));
+    if (!(Math.abs(lat) <= 90 && Math.abs(lon) <= 180 && r > 0 && r <= 1000)) return c.json({ error: "bad area" }, 400);
+    c.header("Cache-Control", "no-store");
+    if (!deps.area) return c.json({ aircraft: [] });
+    try {
+      return c.json({ aircraft: await deps.area(lat, lon, r) });
+    } catch (err) {
+      return c.json({ error: String((err as Error).message ?? err) }, 502);
+    }
   });
 
   // Photo d'un avion, à la demande (clic sur l'avion) : adresse OACI à 6 chiffres hexadécimaux, immatriculation facultative.
