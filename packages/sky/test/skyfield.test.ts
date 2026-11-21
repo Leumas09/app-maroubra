@@ -2,7 +2,7 @@
 // Skyfield + JPL DE421 (fixture générée par bench/sky_reference.py) sur toute l'année 2027.
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { astronomy as A, horizontal, MAROUBRA, moonIllumination, riseSet, sunAltitudeCrossing } from "../src/index";
+import { astronomy as A, horizontal, MAROUBRA, moonIllumination, riseSet, starsHorizontal, sunAltitudeCrossing } from "../src/index";
 
 const ref = JSON.parse(readFileSync(new URL("./fixtures/skyfield_2027.json", import.meta.url), "utf8"));
 const site = { ...MAROUBRA, eyeHeightM: 0 };
@@ -77,5 +77,20 @@ describe("rapport", () => {
     const { writeFileSync, mkdirSync } = await import("node:fs");
     mkdirSync(new URL("../../../bench/results/", import.meta.url), { recursive: true });
     writeFileSync(new URL("../../../bench/results/sky_vs_skyfield.json", import.meta.url), JSON.stringify(report, null, 2));
+  });
+});
+
+describe("étoiles de la carte du ciel contre Skyfield (bench/stars_reference.py)", () => {
+  const stars = JSON.parse(readFileSync(new URL("./fixtures/stars_skyfield.json", import.meta.url), "utf8")) as { cases: { t: string; name: string; ra: number; dec: number; alt: number; az: number }[] };
+  it(`20 étoiles brillantes, 3 dates de 2026 à 2030 : écart sous ${MAX_ARCMIN}′`, () => {
+    const errs = stars.cases.map((c) => {
+      const [h] = starsHorizontal([{ ra: c.ra, dec: c.dec }], new Date(c.t), false, site);
+      const dAz = ((h.az - c.az + 540) % 360) - 180;
+      // Distance angulaire sur la sphère (l'azimut compte moins près du zénith)
+      const sep = Math.acos(Math.min(1, Math.sin(h.alt * Math.PI / 180) * Math.sin(c.alt * Math.PI / 180) + Math.cos(h.alt * Math.PI / 180) * Math.cos(c.alt * Math.PI / 180) * Math.cos(dAz * Math.PI / 180))) * 180 / Math.PI * 60;
+      return sep;
+    });
+    report.stars = { maxArcmin: Math.max(...errs), meanArcmin: errs.reduce((a, b) => a + b, 0) / errs.length, n: errs.length };
+    expect(Math.max(...errs)).toBeLessThan(MAX_ARCMIN);
   });
 });

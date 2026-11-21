@@ -303,6 +303,29 @@ th { color: var(--muted); font-weight: 500; }
   .wx-big { font-size: 38px; }
 }
 
+/* Ciel : le meilleur à voir ce soir, carte du ciel */
+.sky-events { list-style: none; margin: 0; padding: 0; display: grid; }
+.sky-events li { display: grid; grid-template-columns: 70px minmax(0, 1fr) 96px; gap: 14px; align-items: center; padding: 12px 8px; border-top: 1px solid var(--rule); border-radius: 10px; }
+.sky-events li.top { background: var(--paper-3); }
+.sky-ev-when { font-family: var(--display); font-size: 20px; display: grid; }
+.sky-ev-when small { font-family: var(--body); font-size: 12px; color: var(--muted); }
+.sky-ev-what { display: grid; gap: 2px; min-width: 0; }
+.sky-ev-kind { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+.sky-ev-detail { font-size: 14px; color: var(--ink-2); line-height: 1.4; }
+.sky-ev-score { display: grid; justify-items: center; font-family: var(--display); font-size: 24px; padding: 6px 4px; border-radius: 12px; background: var(--paper-3); }
+.sky-ev-score small { font-family: var(--body); font-size: 11px; color: var(--muted); }
+.sky-ev-score.good { background: var(--good-bg); color: var(--good); }
+.sky-ev-score.maybe { background: oklch(92% 0.06 90); color: oklch(42% 0.09 80); }
+.sky-ev-score.poor { background: var(--warn-bg); color: var(--miss-ink); }
+:root[data-theme="night"] .sky-ev-score.maybe { background: oklch(28% 0.05 80); color: oklch(85% 0.1 85); }
+.sky-chart-card .card-head { align-items: center; }
+.sky-time { display: flex; align-items: center; gap: 10px; flex: 1 1 260px; justify-content: flex-end; }
+.sky-time input { flex: 1; max-width: 320px; accent-color: var(--accent); }
+.skychart svg { display: block; width: 100%; max-width: 680px; height: auto; margin: 0 auto; cursor: crosshair; }
+.skychart-info { text-align: center; margin: 8px 0 0; min-height: 1.5em; }
+.skychart-wait { min-height: 360px; display: grid; place-items: center; color: var(--muted); }
+@media (max-width: 639px) { .sky-events li { grid-template-columns: 54px minmax(0, 1fr) 74px; gap: 8px; } .sky-ev-when { font-size: 17px; } .sky-ev-score { font-size: 19px; } }
+
 /* Écran ambiant la nuit : luminosité réduite pour ne pas éclairer la pièce */
 :root[data-ambient="dim"] body { filter: brightness(0.62); }
 
