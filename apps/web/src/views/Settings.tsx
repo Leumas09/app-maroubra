@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Moment } from "@maroubra/core";
+// Numéro de version de l'app (package.json racine), incrémenté à chaque mise en production.
+import { version as release } from "../../../../package.json";
 import { DEFAULT_WINDOWS, MAX_WINDOWS, loadBusWindows, normalizeWindows, saveBusWindows, type BusWindow } from "../lib/bus";
 
 const KINDS: { id: Moment["kind"]; label: string }[] = [
@@ -144,6 +146,7 @@ export function Settings({ ambient, setAmbient }: { ambient: boolean; setAmbient
       <div className="card">
         <h2>Account</h2>
         <form method="post" action="/logout"><button className="btn ghost" type="submit">Sign out of this device</button></form>
+        <p className="note">Maroubra version {release}</p>
       </div>
     </section>
   );

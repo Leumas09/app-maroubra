@@ -639,6 +639,7 @@ Demande de Samuel : ajouter le 396X au 396, élargir la deuxième plage (8 h 15 
   - Les départs d'après minuit (heures GTFS de 24:00 et plus) sont rendus au jour civil suivant.
   - Les 215 jours de semaine du 23/11/2026 au 17/09/2027 partagent 3 horaires (normal, vacances scolaires, jours fériés) : 6 Ko, 1,3 Ko compressé.
 - **Écran** : les deux lignes mêlées par heure ; un X repère le 396X ; « Next: 396X in 4 min » nomme la ligne.
+- **Numéro de version** (demande de Samuel) : `version` du `package.json` racine, affiché en bas de Settings et dans `/health` (`release`). 1.0.0 pour la production d'avant le 22/11/2026, **1.1.0** pour cette partie. La règle d'incrément est dans `CLAUDE.md` ; la CI refuse une PR sans incrément.
 - **Juge** : horaires officiels TfNSW, vérifiés par les tests (`apps/web/test/bus.test.ts`) : jour normal, vacances, Noël, plages réglées, après minuit. La ponctualité réelle n'est pas jugée : il faudrait GTFS-realtime, donc la clé comme secret de la Container App (voir partie Q).
 
 ## Partie R : nuit du 21 au 22 novembre 2026

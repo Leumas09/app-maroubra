@@ -89,6 +89,7 @@ describe("authentification par mot de passe familial", () => {
     const r = await createApp(cfg, store).request("/health");
     const j = await r.json();
     expect(j.status).toBe("ok");
+    expect(j.release).toMatch(/^\d+\.\d+\.\d+$/);
     expect(JSON.stringify(j)).not.toContain("secret");
     expect(r.headers.get("x-robots-tag")).toContain("noindex");
     expect(r.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
