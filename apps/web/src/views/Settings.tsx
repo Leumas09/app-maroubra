@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
 import type { Moment } from "@maroubra/core";
+// Numéro de version de l'app (package.json racine), incrémenté à chaque mise en production.
+import { version as release } from "../../../../package.json";
+import { DEFAULT_WINDOWS, MAX_WINDOWS, loadBusWindows, normalizeWindows, saveBusWindows, type BusWindow } from "../lib/bus";
 
 const KINDS: { id: Moment["kind"]; label: string }[] = [
   { id: "beach", label: "Best time to swim" },
@@ -21,6 +24,39 @@ function b64ToUint8(b64: string): Uint8Array {
 
 const load = <T,>(k: string, d: T): T => { try { const v = localStorage.getItem(k); return v ? (JSON.parse(v) as T) : d; } catch { return d; } };
 const save = (k: string, v: unknown) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* stockage indisponible */ } };
+
+const hmAdd = (hm: string, min: number) => { const m = Math.min(23 * 60 + 59, Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3)) + min); return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`; };
+
+/** Plages horaires du bandeau des bus de l'accueil, enregistrées sur cet appareil dès qu'elles sont valides. */
+function BusWindows() {
+  const [rows, setRows] = useState<BusWindow[]>(loadBusWindows);
+  const valid = normalizeWindows(rows);
+  const update = (next: BusWindow[]) => { setRows(next); const n = normalizeWindows(next); if (n) saveBusWindows(n); };
+  const set = (i: number, j: 0 | 1, v: string) => update(rows.map((w, k) => (k === i ? (j === 0 ? [v, w[1]] : [w[0], v]) : w)));
+  const add = () => { const start = hmAdd(rows[rows.length - 1]?.[1] ?? "06:45", 30); update([...rows, [start, hmAdd(start, 30)]]); };
+  const isDefault = JSON.stringify(valid) === JSON.stringify(DEFAULT_WINDOWS);
+  return (
+    <div className="card">
+      <h2>Buses on Home</h2>
+      <p className="muted" style={{ margin: "0 0 10px" }}>The 396 and 396X from Maroubra Rd after Hereward St towards Maroubra Junction, on weekdays. Choose the times to show; after the last one, Home shows the next weekday.</p>
+      <div className="bus-set">
+        {rows.map(([a, b], i) => (
+          <div className="bus-set-row" key={i}>
+            <input type="time" step={60} value={a} aria-label={`Window ${i + 1} start`} onChange={(e) => set(i, 0, e.target.value)} />
+            <span className="muted">to</span>
+            <input type="time" step={60} value={b} aria-label={`Window ${i + 1} end`} onChange={(e) => set(i, 1, e.target.value)} />
+            {rows.length > 1 ? <button className="btn ghost bus-set-del" aria-label={`Remove window ${i + 1}`} title="Remove" onClick={() => update(rows.filter((_, k) => k !== i))}>×</button> : <span />}
+          </div>
+        ))}
+      </div>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 12 }}>
+        {rows.length < MAX_WINDOWS && <button className="btn ghost small" onClick={add}>Add a time window</button>}
+        {!isDefault && <button className="btn ghost small" onClick={() => { saveBusWindows(null); setRows(DEFAULT_WINDOWS); }}>Reset to {DEFAULT_WINDOWS.map(([a, b]) => `${a} to ${b}`).join(" and ")}</button>}
+      </div>
+      <p className="note" role="status">{valid ? "Saved on this device." : "Each window needs an end time after its start time. Not saved yet."}</p>
+    </div>
+  );
+}
 
 export function Settings({ ambient, setAmbient }: { ambient: boolean; setAmbient: (v: boolean) => void }) {
   const supported = typeof window !== "undefined" && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
@@ -78,6 +114,7 @@ export function Settings({ ambient, setAmbient }: { ambient: boolean; setAmbient
           <label htmlFor="ambient">Ambient display: keep the screen on and dim it at night (for the desk tablet)</label>
         </div>
       </div>
+      <BusWindows />
       <div className="card">
         <h2>Notifications</h2>
         {!supported ? (
@@ -109,6 +146,7 @@ export function Settings({ ambient, setAmbient }: { ambient: boolean; setAmbient
       <div className="card">
         <h2>Account</h2>
         <form method="post" action="/logout"><button className="btn ghost" type="submit">Sign out of this device</button></form>
+        <p className="note">Maroubra version {release}</p>
       </div>
     </section>
   );

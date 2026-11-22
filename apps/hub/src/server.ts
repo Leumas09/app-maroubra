@@ -14,6 +14,8 @@ import type { PhotoFinder } from "./photos";
 import type { FlightHistory } from "./sources/history";
 import type { Push } from "./push";
 import type { Store } from "./store";
+// Numéro de version de l'app (package.json racine), incrémenté à chaque mise en production.
+import { version as release } from "../../../package.json";
 
 /** Container Apps coupe une requête HTTP au bout de 240 s : on ferme le flux avant, le client se reconnecte. */
 export const SSE_MAX_MS = 200_000;
@@ -52,7 +54,7 @@ export function createApp(cfg: Config, store: Store, deps: { push?: Push; vote?:
   app.use("*", (c, next) => (c.req.path === "/api/stream" ? next() : gzip(c, next)));
 
   // Public : santé (sans donnée), page de connexion, icône et service worker.
-  app.get("/health", (c) => c.json({ status: "ok", version: cfg.version, sources: store.health() }));
+  app.get("/health", (c) => c.json({ status: "ok", release, version: cfg.version, sources: store.health() }));
   for (const f of ["/icon.svg", "/icon-192.png", "/icon-512.png", "/manifest.webmanifest", "/sw.js"]) app.get(f, serveStatic({ root: cfg.staticDir }));
   app.get("/login", (c) => c.html(loginPage({ next: c.req.query("next") })));
 

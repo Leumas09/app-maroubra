@@ -612,6 +612,8 @@ Samuel trouvait la page Sky pauvre. Plan en trois paliers ; les deux premiers so
 
 ## Partie Q : bus 396 du matin sur l'accueil (21 novembre 2026)
 
+Complétée par la partie S (396X, plages réglables, nouveaux noms de fichiers).
+
 Demande de Samuel : les jours de semaine, les 396 entre 7 h 15 et 7 h 45 et entre 8 h 15 et 8 h 45, depuis « Maroubra Rd after Hereward St » vers Maroubra Junction. Le week-end, on montre le lundi ; après 8 h 45, le jour de semaine suivant.
 
 - **Source officielle** : GTFS des bus de Sydney de Transport for NSW Open Data (CC BY 4.0), publié le 20/11/2026. Arrêt `2035144`, ligne `2509_396`, direction 1 (vers la ville par Maroubra Junction).
@@ -621,6 +623,24 @@ Demande de Samuel : les jours de semaine, les 396 entre 7 h 15 et 7 h 45 et entr
   - Jours fériés : 07:28, 08:15, 08:24, 08:32, 08:42.
 - **Clé d'API** : la clé TfNSW de Samuel est enregistrée dans l'environnement de développement seulement. Elle n'est ni dans le dépôt ni dans la Container App.
 - **Limite** : l'horaire est figé à la date d'extraction. TfNSW publie souvent des mises à jour : relancer le script en cas de changement d'horaire. Un rafraîchissement automatique, et les retards en temps réel (GTFS-realtime), demanderaient la clé comme secret de la Container App. Ce serait un nouveau secret, donc à accepter par Samuel, avec un changement Bicep.
+
+## Partie S : 396X et plages réglables (22 novembre 2026)
+
+Demande de Samuel : ajouter le 396X au 396, élargir la deuxième plage (8 h 15 à 8 h 45) et rendre les plages réglables dans Settings.
+
+- **396X** : express Maroubra Beach vers City Museum, ligne `2509_396X`, direction 1. Il dessert le même arrêt `2035144` et passe par Maroubra Junction (Pacific Square). Les jours de semaine, 10 départs de 07:10 à 08:41 ; aucun les jours fériés.
+- **Plages** :
+  - par défaut, 07:15 à 07:45 et **08:15 à 09:15** ; la fin exacte de la deuxième plage n'était pas précisée, 9 h 15 est un choix à confirmer ;
+  - réglables dans Settings (« Buses on Home »), jusqu'à 4 plages, enregistrées sur l'appareil (`mb.bus.windows`), comme les autres réglages de Settings ;
+  - une plage invalide (fin avant début) n'est pas enregistrée ; les plages qui se chevauchent sont fusionnées ;
+  - la bascule vers le jour de semaine suivant suit la fin de la dernière plage (avant : 8 h 45 en dur).
+- **Données** : `apps/hub/scripts/bus.py` (remplace `bus_396.py`) construit `apps/web/src/data/bus.json` (remplace `bus-396.json`) depuis le GTFS publié le 21/11/2026.
+  - Le fichier garde tous les départs de la journée des deux lignes, pour que n'importe quelle plage marche sans réextraction.
+  - Les départs d'après minuit (heures GTFS de 24:00 et plus) sont rendus au jour civil suivant.
+  - Les 215 jours de semaine du 23/11/2026 au 17/09/2027 partagent 3 horaires (normal, vacances scolaires, jours fériés) : 6 Ko, 1,3 Ko compressé.
+- **Écran** : les deux lignes mêlées par heure ; un X repère le 396X ; « Next: 396X in 4 min » nomme la ligne.
+- **Numéro de version** (demande de Samuel) : `version` du `package.json` racine, affiché en bas de Settings et dans `/health` (`release`). 1.0.0 pour la production d'avant le 22/11/2026, **1.1.0** pour cette partie. La règle d'incrément est dans `CLAUDE.md` ; la CI refuse une PR sans incrément.
+- **Juge** : horaires officiels TfNSW, vérifiés par les tests (`apps/web/test/bus.test.ts`) : jour normal, vacances, Noël, plages réglées, après minuit. La ponctualité réelle n'est pas jugée : il faudrait GTFS-realtime, donc la clé comme secret de la Container App (voir partie Q).
 
 ## Partie R : nuit du 21 au 22 novembre 2026
 

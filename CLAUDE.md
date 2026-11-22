@@ -25,6 +25,11 @@ Commandes : `npm test` (tous les tests), `apps/hub/scripts/demo.sh start` (hubs 
 - Tag `project=maroubra` sur chaque ressource, dans `rg-app-maroubra`. Ne jamais modifier le socle `rg-kiwi-apps`.
 - Chaque prévision affichée a un juge extérieur (observation, référence indépendante) ; un objectif manqué reste visible dans le Track record.
 - Interface en anglais ; documentation et code commentés en français, sans tiret cadratin.
+- Numéro de version (demandé par Samuel le 22 novembre 2026) : un seul numéro `MAJEUR.MINEUR.CORRECTIF`, dans le `package.json` racine.
+  - Affiché en bas de Settings (« Maroubra version 1.1.0 ») et dans `/health` (`release`, à côté du commit dans `version`).
+  - Chaque PR vers `main` l'incrémente, puisque chaque fusion part en production : `npm version minor --no-git-tag-version` pour une fonctionnalité, `patch` pour une correction ou de la documentation, `major` seulement sur décision de Samuel.
+  - La CI refuse une PR dont la version n'est pas supérieure à celle de `main`. Deux PR en parallèle : fusionner `main` dans la branche, puis réincrémenter.
+  - Dans le résumé à Samuel, donner le numéro mis en production.
 - Autonomie jusqu'à la production : Samuel donne les fonctionnalités, Claude fait tout le reste sans attendre de feu vert, du code à la mise en production.
   - Pull request : ouverte dès qu'un lot est terminé, testé et poussé.
   - Suivi : abonnement d'office à chaque PR ouverte (checks, relectures, commentaires) et correction de ce qui en ressort.

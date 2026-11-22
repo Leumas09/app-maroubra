@@ -31,6 +31,17 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: Numéro de version incrémenté (pull request)
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --depth=1 origin "${{ github.base_ref }}"
+          base=$(git show FETCH_HEAD:package.json | jq -r '.version // "0.0.0"')
+          head=$(jq -r '.version // "0.0.0"' package.json)
+          echo "Version : $base sur ${{ github.base_ref }}, $head ici"
+          if [ "$head" = "$base" ] || [ "$(printf '%s\n%s\n' "$base" "$head" | sort -V | tail -1)" != "$head" ]; then
+            echo "::error file=package.json::Incrémenter la version (npm version minor|patch --no-git-tag-version) : $head n'est pas supérieure à $base."
+            exit 1
+          fi
       - run: npm ci
       - name: Vérification des types
         run: |
@@ -72,8 +83,9 @@ jobs:
       - name: Vérification du déploiement
         run: |
           for i in $(seq 1 30); do
-            v=$(curl -sf "https://$APP_NAME.apps.akakiwi.com/health" | jq -r .version || true)
-            [ "$v" = "${{ github.sha }}" ] && echo "Version servie : $v" && exit 0
+            h=$(curl -sf "https://$APP_NAME.apps.akakiwi.com/health" || true)
+            v=$(echo "$h" | jq -r .version 2>/dev/null || true)
+            [ "$v" = "${{ github.sha }}" ] && echo "Version servie : $(echo "$h" | jq -r .release) ($v)" && exit 0
             sleep 10
           done
           echo "La version servie n'est pas ${{ github.sha }}" && exit 1
