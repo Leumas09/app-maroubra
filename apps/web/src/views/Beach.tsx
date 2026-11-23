@@ -105,64 +105,85 @@ function Instruments({ b, now, lifeguardTemp }: { b: B; now: Date; lifeguardTemp
 }
 
 /** Caméras de la mairie de Randwick (service vidéo secdn.net, adresses relevées sur leur page des webcams). */
-const CAM_BASE = "randwickcc-channel/play";
-const camImage = (id: string, tick: number) => `https://randwickcc-thumb.secdn.net/${CAM_BASE}/${id}/thumbnail.jpg?t=${tick}`;
-const camStream = (id: string) => `https://randwickcc-hls.secdn.net/${CAM_BASE}/${id}/playlist.m3u8`;
+const camImage = (id: string, t: number) => `https://randwickcc-thumb.secdn.net/randwickcc-channel/play/${id}/thumbnail.jpg?t=${t}`;
+const CAM_REFRESH_MS = 30_000;
+/** Au-delà, une image qui ne se renouvelle plus n'est plus présentée comme « en direct ». */
+const CAM_STALE_MS = 3 * 60_000;
 
 /**
- * Une caméra : image en direct de la mairie, renouvelée toutes les 30 s ; « Play live video » lance le flux
- * vidéo (HLS) dans la page. Si la vidéo ne démarre pas en 12 s, on revient à l'image avec un message.
+ * Image en direct d'une caméra : chargée à part puis affichée, pour garder la dernière bonne image si un
+ * chargement échoue. Renouvelée toutes les 30 s et dès que la page redevient visible (les minuteries d'un
+ * onglet ou d'une app en arrière-plan sont suspendues : sans cela, on rouvre l'app sur l'image de la veille).
+ */
+function useCamImage(id: string, active: boolean): { url: string | null; down: boolean } {
+  const [shown, setShown] = useState<{ url: string; at: number } | null>(null);
+  const [failedAt, setFailedAt] = useState<number | null>(null);
+  useEffect(() => {
+    if (!active) return;
+    let alive = true;
+    const load = () => {
+      const url = camImage(id, Math.floor(Date.now() / 1000));
+      const img = new Image();
+      img.referrerPolicy = "no-referrer";
+      img.onload = () => { if (alive) { setShown({ url, at: Date.now() }); setFailedAt(null); } };
+      img.onerror = () => { if (alive) setFailedAt(Date.now()); };
+      img.src = url;
+    };
+    load();
+    const timer = setInterval(load, CAM_REFRESH_MS);
+    const onVisible = () => { if (document.visibilityState === "visible") load(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { alive = false; clearInterval(timer); document.removeEventListener("visibilitychange", onVisible); };
+  }, [id, active]);
+  const down = failedAt != null && (!shown || failedAt - shown.at > CAM_STALE_MS);
+  return { url: down ? null : shown?.url ?? null, down };
+}
+
+/**
+ * Une caméra : l'image en direct de la mairie (une nouvelle image par minute environ), qu'on touche pour
+ * la voir en grand. La vidéo n'est pas lue dans la page : le serveur de la mairie refuse le flux hors de
+ * son propre site (403, voir docs/PLAN.md, partie T) ; un lien y mène.
  */
 function CamView({ id, name, where, offline }: { id: string; name: string; where: string; offline: boolean }) {
-  const [tick, setTick] = useState(() => Math.floor(Date.now() / 30e3));
-  const [mode, setMode] = useState<"image" | "loading" | "video" | "failed">("image");
-  const [broken, setBroken] = useState(false);
-  const video = useRef<HTMLVideoElement>(null);
+  const { url, down } = useCamImage(id, !offline);
+  const [zoom, setZoom] = useState(false);
+  const scroller = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (mode !== "image" && mode !== "failed") return;
-    const t = setInterval(() => setTick(Math.floor(Date.now() / 30e3)), 30e3);
-    return () => clearInterval(t);
-  }, [mode]);
-  useEffect(() => {
-    if (mode !== "loading" && mode !== "video") return;
-    const v = video.current!;
-    let hls: { destroy: () => void } | null = null;
-    let done = false;
-    const fail = () => { if (!done) { done = true; hls?.destroy(); setMode("failed"); } };
-    const timer = setTimeout(fail, 12_000);
-    const ok = () => { done = true; clearTimeout(timer); setMode("video"); };
-    v.addEventListener("playing", ok, { once: true });
-    if (v.canPlayType("application/vnd.apple.mpegurl")) {
-      v.src = camStream(id);
-      v.play().catch(fail);
-    } else {
-      void import("hls.js").then(({ default: Hls }) => {
-        if (!Hls.isSupported()) return fail();
-        const h = new Hls({ lowLatencyMode: true });
-        hls = h;
-        h.on(Hls.Events.ERROR, (_e, data) => { if (data.fatal) fail(); });
-        h.loadSource(camStream(id));
-        h.attachMedia(v);
-        h.on(Hls.Events.MANIFEST_PARSED, () => { v.play().catch(fail); });
-      }).catch(fail);
-    }
-    return () => { clearTimeout(timer); v.removeEventListener("playing", ok); hls?.destroy(); v.removeAttribute("src"); v.load(); };
-  }, [mode === "loading" || mode === "video", id]);
-  const live = mode === "loading" || mode === "video";
+    if (!zoom) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setZoom(false); };
+    document.addEventListener("keydown", onKey);
+    // Téléphone tenu droit : l'image garde toute la hauteur de l'écran et se fait glisser ; on part du milieu.
+    const el = scroller.current;
+    if (el) el.scrollLeft = (el.scrollWidth - el.clientWidth) / 2;
+    return () => document.removeEventListener("keydown", onKey);
+  }, [zoom]);
+  const alt = `${name}, live image from the council camera`;
   return (
     <div className="cam">
       <div className="cam-view">
-        {offline ? <div className="cam-off">Live image (not loaded with sample data)</div> : live ? <video ref={video} muted playsInline autoPlay controls={mode === "video"} aria-label={`${name}, live video`} />
-          : broken ? <div className="cam-off">Camera image unavailable right now</div>
-            : <img src={camImage(id, tick)} alt={`${name}, live image from the council camera`} referrerPolicy="no-referrer" onError={() => setBroken(true)} onLoad={() => setBroken(false)} />}
-        {mode === "loading" && <span className="cam-live"><span className="dot" />Connecting…</span>}
-        {mode === "video" && <span className="cam-live"><span className="dot" />Live</span>}
-        {!live && !offline && <button className="cam-live cam-play" onClick={() => setMode("loading")}><span className="dot" />Play live video</button>}
+        {offline ? <div className="cam-off">Live image (not loaded with sample data)</div>
+          : down ? <div className="cam-off">Camera image unavailable right now. Trying again every 30 s.</div>
+            : !url ? <div className="cam-off">Loading the live image…</div>
+              : (
+                <button className="cam-open" onClick={() => setZoom(true)} aria-label={`${name}: enlarge the live image`}>
+                  <img src={url} alt={alt} referrerPolicy="no-referrer" />
+                  <span className="cam-live"><span className="dot" />Live image</span>
+                </button>
+              )}
       </div>
       <div className="cam-name">{name}</div>
-      <div className="cam-where">
-        {mode === "failed" ? "The live video would not start here; showing the live image, refreshed every 30 s." : mode === "video" ? where : `${where}. Live image, refreshed every 30 s.`}
-      </div>
+      <div className="cam-where">{where}. Live image, refreshed every 30 s; tap to enlarge.</div>
+      {zoom && url && (
+        <div className="cam-zoom" role="dialog" aria-modal="true" aria-label={`${name}, live image`}>
+          <div className="cam-zoom-scroll" ref={scroller} onClick={() => setZoom(false)}>
+            <img src={url} alt={alt} referrerPolicy="no-referrer" />
+          </div>
+          <div className="cam-zoom-bar">
+            <div><strong>{name}</strong><span className="cam-zoom-sub">{where}. Live image, refreshed every 30 s.</span></div>
+            <button className="btn ghost small" onClick={() => setZoom(false)} autoFocus>Close</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -176,7 +197,7 @@ function Cams({ photo, photoAt, offline }: { photo: string | null; photoAt: stri
         <CamView id="maroubra_south" name="Maroubra South" where="South end of the beach" offline={offline} />
       </div>
       {photo && <p className="note">Lifeguards' photo this morning ({photoAt ? time(new Date(photoAt)) : ""}): <a href={photo} target="_blank" rel="noreferrer">open</a>.</p>}
-      <p className="note">The council cams can go offline in rough weather. <a href={CAMS_PAGE} target="_blank" rel="noreferrer">Council cams page</a>. Swellnet also runs a free Maroubra cam: <a href="https://www.swellnet.com/surfcams/maroubra" target="_blank" rel="noreferrer">swellnet.com</a>.</p>
+      <p className="note">Live video plays on the <a href={CAMS_PAGE} target="_blank" rel="noreferrer">council's cams page</a> only. The cams can go offline in rough weather. Swellnet also runs a free Maroubra cam: <a href="https://www.swellnet.com/surfcams/maroubra" target="_blank" rel="noreferrer">swellnet.com</a>.</p>
     </div>
   );
 }

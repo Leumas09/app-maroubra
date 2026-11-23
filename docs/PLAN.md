@@ -696,3 +696,37 @@ Le hub construit comme en production a tourné dans cette session sur les source
 2. Dans `/health`, trois sources nouvelles doivent passer à `ok: true` : `fc-airport`, `fc-buoy`, `satellite`, puis `verify`.
 3. Le Track record vivant montrera dès le premier passage les 3 semaines d'archive déjà accumulées (si l'archive a bien tourné depuis le 1er novembre). Il juge la prévision **affichée** (point de Maroubra) contre l'aéroport, à 7 km ; la même prévision au point exact de l'aéroport est donnée en référence après 7 jours, pour séparer l'erreur du modèle de celle due au lieu.
 4. La correction ne s'appliquera d'elle-même que lorsqu'elle aura battu le modèle brut sur 14 jours avec au moins 300 heures jugées.
+
+## Partie T : question du lever de soleil retirée, caméras en image directe (24 novembre 2026)
+
+Deux demandes de Samuel.
+
+### T.1 La question du matin est retirée
+
+- La question « This morning's sunrise: worth getting up for? » ne s'affiche plus sur l'accueil ; l'appel `/api/vote` et l'écriture des votes sont retirés.
+- Conséquence assumée : le score de lever de soleil n'a plus de juge extérieur. La ligne reste dans le Track record avec le statut « Not judged » et l'explication, au lieu de disparaître.
+- Le ciel vu par satellite au lever reste archivé (`sunsat-…`) pour un futur juge qui ne demande rien à personne (voir R.4 : l'infrarouge seul ne suffit pas).
+- La table `votes` du compte de stockage n'est plus utilisée. Elle reste dans le Bicep : la retirer est un changement d'infra, à faire avec l'accord de Samuel.
+
+### T.2 Caméras : la vidéo ne démarrait pas
+
+Constat, depuis cette session, sur le serveur qui sert réellement les caméras de la mairie (`vse2-…secdn.net`, vers lequel `randwickcc-thumb` et `randwickcc-hls` redirigent) :
+
+| Adresse | Réponse |
+|---|---|
+| `…/play/maroubra_north/thumbnail.jpg` (et `maroubra_south`) | 200, JPEG 1280 × 720, horodaté par la caméra, renouvelé environ une fois par minute |
+| `…/play/maroubra_north/playlist.m3u8` (l'adresse que lisait « Play live video ») | **403 Forbidden** |
+
+- Le bouton « Play live video » ne pouvait donc pas marcher : le serveur refuse le flux à cette adresse. L'adresse n'avait jamais été confirmée (partie O).
+- La vraie adresse du flux est dans le script du lecteur de la mairie (`beach-cams.js`, lecteur Clappr), derrière une vérification Cloudflare que cette session ne contourne pas. Il est possible aussi que le flux ne soit servi qu'aux pages de la mairie ; dans ce cas il ne pourra pas être lu dans notre page.
+- Décision : le lecteur vidéo et `hls.js` sont retirés ; `connect-src` et `media-src` ne citent plus `secdn.net`. Un lien mène à la page des caméras de la mairie pour la vidéo.
+- L'image directe devient le coeur de la carte :
+  - chargée à part puis affichée : une erreur de chargement ne remplace plus l'image par « unavailable » jusqu'au rechargement de la page (c'était le cas : l'écran ambiant pouvait rester sans caméra toute la journée) ;
+  - renouvelée toutes les 30 s, et tout de suite quand la page redevient visible (au réveil de l'app le matin, on ne voit plus l'image de la veille) ;
+  - « unavailable » seulement après 3 minutes sans image ;
+  - on touche l'image pour la voir en grand : entière en paysage ; sur un téléphone tenu droit, toute la hauteur de l'écran, qu'on fait glisser le long de la plage.
+- Pour rétablir la vidéo dans la page : relever l'adresse du flux depuis un navigateur ordinaire sur la page de la mairie (outils de développement, onglet Réseau, filtre `m3u8`), puis vérifier qu'elle répond hors de leur site.
+
+### T.3 Idée à discuter : voir s'il y a déjà des surfeurs à l'eau
+
+Pas commencé : Samuel veut en parler avant. Les éléments pour décider sont dans la conversation du 24 novembre (image de 1280 × 720, un surfeur au large fait quelques pixels ; juge nécessaire avant d'afficher un compte).

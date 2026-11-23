@@ -1,6 +1,6 @@
 import { serve } from "@hono/node-server";
 import type { Beach, BeachStatus, Buoy, Fires, Flights, Iss, Marine, Moment, SpaceWeather, Sunrise, Weather } from "@maroubra/core";
-import { archiveHour, archiveOutcome, archiveSunriseSky, archiveReader, archiveVote, memoryArchive, tableArchive, type ArchiveTable } from "./archive";
+import { archiveHour, archiveOutcome, archiveSunriseSky, archiveReader, memoryArchive, tableArchive, type ArchiveTable } from "./archive";
 import { startCollectors, Waiting, type Collector } from "./collector";
 import { loadConfig } from "./config";
 import { beach } from "./derive/beach";
@@ -113,7 +113,7 @@ if (archive && !cfg.offline) {
 }
 
 const app = createApp(cfg, store, {
-  push: push ?? undefined, vote: (v) => archiveVote(archive, v), satellite: () => satellitePng,
+  push: push ?? undefined, satellite: () => satellitePng,
   photos: cfg.offline ? undefined : photoFinder(), area: cfg.offline ? undefined : areaFinder(flights), history: flights.history,
 });
 serve({ fetch: app.fetch, port: cfg.port }, (info) => {

@@ -1,7 +1,7 @@
 // Score du lever de soleil sur la mer (0 à 10), méthode des photographes : il faut des nuages
 // moyens ou hauts près de nous pour « prendre la couleur », et un horizon dégagé de nuages bas
-// au large, le long de l'azimut du Soleil, pour que la lumière passe. Expérimental : vérifié
-// ensuite par les votes de la famille et la couverture nuageuse satellite à l'heure du lever.
+// au large, le long de l'azimut du Soleil, pour que la lumière passe. Expérimental : sans juge
+// extérieur depuis le retrait de la question du matin (docs/PLAN.md, partie T) ; le ciel satellite au lever reste archivé.
 import type { Sunrise } from "@maroubra/core";
 import { astronomy as A, horizontal, riseSet } from "@maroubra/sky";
 import { SITE } from "../config";

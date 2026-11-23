@@ -20,7 +20,7 @@ Les secrets acceptés pour ce projet sont trois secrets de la Container App :
 | Identité d'exécution | `id-maroubra-run` | tire l'image, écrit les tables, appelle le modèle |
 | Identité de déploiement | `id-maroubra-ci` + crédential fédéré GitHub (branche `main`) | workflow en OIDC |
 | Rôles sur l'ACR du socle | AcrPull (`run`), AcrPush (`ci`) | seule exception hors du groupe, description `project=maroubra` |
-| Compte de stockage | `stmaroubra…` | tables `archive`, `push`, `votes` ; clé partagée désactivée ; rôle Storage Table Data Contributor pour `run` |
+| Compte de stockage | `stmaroubra…` | tables `archive`, `push`, `votes` (cette dernière n'est plus utilisée depuis le retrait de la question du lever de soleil) ; clé partagée désactivée ; rôle Storage Table Data Contributor pour `run` |
 | Microsoft Foundry | `ai-maroubra-…` (AIServices) | déploiement `gpt-6.1-sol` (2026-09-29, Data Zone Standard Asie-Pacifique, 20 000 jetons/min) ; authentification locale désactivée ; rôle Cognitive Services OpenAI User pour `run` |
 | Container App | `maroubra` dans `cae-kiwi-apps` | 1 réplica permanent, 0,5 vCPU / 1 Gio, 3 secrets, sondes `/health` ; rôle Container Apps Contributor pour `ci` sur l'app seule |
 

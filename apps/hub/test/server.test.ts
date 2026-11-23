@@ -123,23 +123,13 @@ describe("flux temps réel", () => {
   });
 });
 
-describe("vote du matin et image satellite", () => {
-  it("exigent une session, valident le vote et le transmettent anonymisé", async () => {
-    const votes: { date: string; value: number; voter: string }[] = [];
-    const app = createApp(cfg, new Store(), { vote: async (v) => { votes.push(v); }, satellite: () => Buffer.from([0x89, 0x50, 0x4e, 0x47]) });
+describe("image satellite", () => {
+  it("exige une session", async () => {
+    const app = createApp(cfg, new Store(), { satellite: () => Buffer.from([0x89, 0x50, 0x4e, 0x47]) });
     expect((await app.request("/api/satellite.png")).status).toBe(401);
-    expect((await app.request("/api/vote", { method: "POST", body: "{}" })).status).toBe(401);
     const token = (await login(app, "test-family-password")).headers.get("set-cookie")!.match(/mb_s=([^;]+)/)![1];
-    const headers = { cookie: `mb_s=${token}`, "content-type": "application/json" };
-    const img = await app.request("/api/satellite.png", { headers });
+    const img = await app.request("/api/satellite.png", { headers: { cookie: `mb_s=${token}` } });
     expect(img.status).toBe(200);
     expect(img.headers.get("content-type")).toBe("image/png");
-    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Australia/Sydney" }).format(new Date());
-    expect((await app.request("/api/vote", { method: "POST", headers, body: JSON.stringify({ date: today, value: 5, voter: "a" }) })).status).toBe(400);
-    expect((await app.request("/api/vote", { method: "POST", headers, body: JSON.stringify({ date: "2020-01-01", value: 2, voter: "a" }) })).status).toBe(400);
-    expect((await app.request("/api/vote", { method: "POST", headers, body: JSON.stringify({ date: today, value: 2, voter: "device-1" }) })).status).toBe(200);
-    expect(votes).toHaveLength(1);
-    expect(votes[0].voter).not.toBe("device-1");
-    expect(votes[0].voter).toMatch(/^[0-9a-f]{16}$/);
   });
 });
