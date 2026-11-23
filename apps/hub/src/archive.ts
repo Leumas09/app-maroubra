@@ -3,7 +3,7 @@
 // Les lignes ne contiennent que des données publiques ; les prévisions archivées sont toujours BRUTES.
 import type { Buoy, Marine, Metar, OverheadOutcome, Sunrise, Weather } from "@maroubra/core";
 import type { TableClient } from "@azure/data-tables";
-import type { ArchiveData, FcRow, ObsRow, SunriseRow, VoteRow } from "./derive/verify";
+import type { ArchiveData, FcRow, ObsRow, SunriseRow } from "./derive/verify";
 import { issuedToUnix, ktToKmh, WINDOW_DAYS } from "./derive/verify";
 import { metarRain, type PointForecast } from "./sources/weather";
 import type { Store } from "./store";
@@ -107,10 +107,6 @@ export async function archiveSunriseSky(table: ArchiveTable | null, s: { date: s
     .catch((err) => console.error(JSON.stringify({ event: "archive_failed", error: String(err) })));
 }
 
-export async function archiveVote(table: ArchiveTable | null, v: { date: string; value: number; voter: string }) {
-  await table?.upsert({ partitionKey: `vote-${v.date.slice(0, 4)}`, rowKey: `${v.date}-${v.voter}`, date: v.date, value: v.value, at: new Date().toISOString() });
-}
-
 // Lecture : les partitions de plus de deux jours ne changent plus, on les garde en cache.
 const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) && v > -90 ? v : null);
 /** Hauteurs de vagues : les anciennes lignes notaient « absente » par -1. */
@@ -169,7 +165,6 @@ export function archiveReader(table: ArchiveTable) {
       ...months.map((m) => () => part(`obs-buoy-${m}`, now, (r): ObsRow => ({ t: Number(r.rowKey), hs: height(r.hs) }), ["hs"])),
       ...months.map((m) => () => part(`ovh-${m}`, now, (r): OverheadOutcome => ({ hex: String(r.hex), callsign: (r.callsign as string) || null, at: String(r.at), inMin: Number(r.inMin), minKm: n(r.minKm), hit: r.hit === true }))),
       ...years.map((y) => () => part(`sunrise-${y}`, now, (r): SunriseRow => ({ date: r.rowKey, score: Number(r.score) }), ["score"])),
-      ...years.map((y) => () => part(`vote-${y}`, now, (r): VoteRow => ({ date: String(r.date), value: Number(r.value) }), ["date", "value"])),
     ]);
     const live = new Set([...days.flatMap((d) => ["fc-openmeteo", "fc-yssy", "fc-marine", "fc-buoypt"].map((p) => `${p}-${d}`)), ...months.flatMap((m) => [`obs-yssy-${m}`, `obs-buoy-${m}`, `ovh-${m}`])]);
     for (const k of cache.keys()) if (!live.has(k)) cache.delete(k);
@@ -178,7 +173,7 @@ export function archiveReader(table: ArchiveTable) {
     const take = <T>(k: number) => groups.slice(i, (i += k)).flat() as T[];
     const fcMaroubra = take<FcRow>(D), fcAirport = take<FcRow>(D), fcMarine = take<FcRow>(D), fcBuoy = take<FcRow>(D);
     const metar = take<ObsRow>(M), buoy = take<ObsRow>(M), overhead = take<OverheadOutcome>(M);
-    const sunrise = take<SunriseRow>(Y), votes = take<VoteRow>(Y);
-    return { fcMaroubra, fcAirport, fcMarine, fcBuoy, metar, buoy, overhead, sunrise, votes };
+    const sunrise = take<SunriseRow>(Y);
+    return { fcMaroubra, fcAirport, fcMarine, fcBuoy, metar, buoy, overhead, sunrise };
   };
 }

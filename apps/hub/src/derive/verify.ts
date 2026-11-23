@@ -1,5 +1,5 @@
 // Track record en production : chaque prévision archivée par le hub est confrontée à son juge
-// (METAR de l'aéroport, bouée de Sydney, traces ADS-B, votes de la famille), sur 30 jours glissants.
+// (METAR de l'aéroport, bouée de Sydney, traces ADS-B), sur 30 jours glissants.
 //
 // La correction locale est apprise EN LIGNE : pour juger une prévision émise à l'instant I, on n'utilise
 // que les observations antérieures à I. Le score « corrigé » est donc celui qu'on aurait vraiment affiché.
@@ -284,21 +284,19 @@ export function spearman(x: number[], y: number[]): number {
 }
 
 export interface SunriseRow { date: string; score: number }
-export interface VoteRow { date: string; value: number } // 0 non, 1 bof, 2 oui
-
-export function sunriseScore(forecasts: SunriseRow[], votes: VoteRow[]): LiveScore {
-  const byDate = new Map<string, number[]>();
-  for (const v of votes) byDate.set(v.date, [...(byDate.get(v.date) ?? []), v.value]);
-  const fc = new Map(forecasts.map((f) => [f.date, f.score]));
-  const rows = [...byDate].filter(([d]) => fc.has(d)).map(([d, vs]) => ({ d, score: fc.get(d)!, vote: vs.reduce((a, b) => a + b, 0) / vs.length }));
-  const rho = rows.length >= 3 ? spearman(rows.map((r) => r.score), rows.map((r) => r.vote)) : NaN;
+/**
+ * Score de lever de soleil : plus de juge depuis le retrait de la question du matin (demande de Samuel,
+ * 24 novembre 2026). La ligne reste dans le Track record pour le dire clairement.
+ */
+export function sunriseScore(forecasts: SunriseRow[]): LiveScore {
   return {
-    key: "sunrise", title: "Sunrise score", n: rows.length, since: rows.map((r) => r.d).sort()[0] ?? null,
-    judge: "The family's votes the morning after",
+    key: "sunrise", title: "Sunrise score", n: forecasts.length, since: null,
+    judge: "No outside judge at the moment",
     target: "rank correlation of 0.6 or more",
-    status: status(rows.length, 8, rho >= 0.6),
-    result: rows.length ? (Number.isFinite(rho) ? `ρ = ${r2(rho)} over ${rows.length} mornings` : `${rows.length} morning${rows.length > 1 ? "s" : ""} rated`) : "No vote yet",
-    detail: `Each morning, the home screen asks whether the sunrise was worth it. ${rows.length < 8 ? `Needs ${8 - rows.length} more rated mornings to judge.` : "1 would mean the score always ranks mornings like the family does."}`,
+    status: "unjudged",
+    result: "Not judged",
+    detail: "The morning question that rated each sunrise was removed in November 2026, so nothing checks this score for now. " +
+      "The satellite view of the sky at sunrise is still archived, for a future check that needs no one to answer.",
   };
 }
 
@@ -313,7 +311,6 @@ export interface ArchiveData {
   buoy: ObsRow[];
   overhead: OverheadOutcome[];
   sunrise: SunriseRow[];
-  votes: VoteRow[];
 }
 
 /** Jours d'émission distincts (et non de validité, qui courent 48 h en avance). */
@@ -344,7 +341,7 @@ export function verify(d: ArchiveData, now = Date.now() / 1000): Verification {
       // Pas de score « lever de soleil vu par satellite » : l'infrarouge seul suit mal les étages de nuages
       // (corrélation 0,19 pour les bas, 0,44 pour les moyens et hauts, contre le METAR ; voir docs/PLAN.md, partie I).
       // Les observations restent archivées pour un futur classement multi-bandes.
-      overheadScore(d.overhead, now), sunriseScore(d.sunrise, d.votes),
+      overheadScore(d.overhead, now), sunriseScore(d.sunrise),
     ],
     correction: { temp: temp.correction, wind: wind.correction },
   };

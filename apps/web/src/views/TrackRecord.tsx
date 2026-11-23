@@ -54,7 +54,7 @@ function LeadChart({ v }: { v: BenchVerification }) {
   );
 }
 
-const STATUS: Record<LiveScore["status"], [string, string]> = { met: ["good", "Met"], missed: ["miss", "Missed"], collecting: ["wait", "Collecting data"] };
+const STATUS: Record<LiveScore["status"], [string, string]> = { met: ["good", "Met"], missed: ["miss", "Missed"], collecting: ["wait", "Collecting data"], unjudged: ["wait", "Not judged"] };
 
 /** Erreur moyenne par échéance : modèle brut contre prévision corrigée (scores en production). */
 function LiveLeads({ s }: { s: LiveScore }) {

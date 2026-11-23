@@ -335,9 +335,10 @@ export interface Snapshot {
 }
 
 // Vérification en production : chaque prévision archivée est confrontée à son juge (METAR, bouée,
-// traces ADS-B, votes de la famille), sur une fenêtre glissante.
+// traces ADS-B), sur une fenêtre glissante.
 
-export type ScoreStatus = "met" | "missed" | "collecting";
+/** « unjudged » : prévision affichée sans juge extérieur pour l'instant (dit tel quel dans le Track record). */
+export type ScoreStatus = "met" | "missed" | "collecting" | "unjudged";
 
 export interface LeadScore {
   lead: string; // ex. « 0–6 h »

@@ -74,7 +74,7 @@ describe("correction apprise en ligne, sans fuite du futur", () => {
 
   it("le Track record vivant n'active la correction que si elle bat le modèle brut", () => {
     const { fc, obs } = month();
-    const v = verify({ fcAirport: [], fcMaroubra: fc, fcBuoy: [], fcMarine: [], metar: obs, buoy: [], overhead: [], sunrise: [], votes: [] }, T0 + 30 * 86400);
+    const v = verify({ fcAirport: [], fcMaroubra: fc, fcBuoy: [], fcMarine: [], metar: obs, buoy: [], overhead: [], sunrise: [] }, T0 + 30 * 86400);
     const temp = v.scores.find((s) => s.key === "temp")!;
     expect(temp.status).not.toBe("collecting");
     expect(v.correction.temp.on).toBe(true);
@@ -82,15 +82,15 @@ describe("correction apprise en ligne, sans fuite du futur", () => {
     // Le vent a un biais constant de +5 km/h : appris aussi.
     expect(v.correction.wind.on).toBe(true);
     // Sans données : en apprentissage, rien d'appliqué.
-    const empty = verify({ fcAirport: [], fcMaroubra: [], fcBuoy: [], fcMarine: [], metar: [], buoy: [], overhead: [], sunrise: [], votes: [] }, T0);
+    const empty = verify({ fcAirport: [], fcMaroubra: [], fcBuoy: [], fcMarine: [], metar: [], buoy: [], overhead: [], sunrise: [] }, T0);
     expect(empty.correction.temp.on).toBe(false);
-    expect(empty.scores.every((s) => s.status === "collecting")).toBe(true);
+    expect(empty.scores.every((s) => s.status === (s.key === "sunrise" ? "unjudged" : "collecting"))).toBe(true);
   });
 
   it("applique la correction à l'écran en gardant les valeurs brutes", () => {
     const { fc, obs } = month();
     const now = T0 + 30 * 86400;
-    const v = verify({ fcAirport: [], fcMaroubra: fc, fcBuoy: [], fcMarine: [], metar: obs, buoy: [], overhead: [], sunrise: [], votes: [] }, now);
+    const v = verify({ fcAirport: [], fcMaroubra: fc, fcBuoy: [], fcMarine: [], metar: obs, buoy: [], overhead: [], sunrise: [] }, now);
     const hours = Array.from({ length: 30 }, (_, i) => now + i * 3600);
     const w = { current: { t: now, temp: 22, feels: 22 }, rainPast24h: 0, hourly: hours.map((t) => ({ t, temp: truth(t) + modelBias(t), feels: truth(t) + modelBias(t), wind: 25 })),
       daily: [{ t: now, max: 30, min: 15 }] } as unknown as Weather;
@@ -152,16 +152,16 @@ describe("annonces de survol jugées sur la trace réelle", () => {
   });
 });
 
-describe("lever de soleil jugé par les votes", () => {
+describe("lever de soleil sans juge", () => {
   it("corrélation de rang", () => {
     expect(spearman([1, 2, 3, 4], [10, 20, 30, 40])).toBeCloseTo(1);
     expect(spearman([1, 2, 3, 4], [4, 3, 2, 1])).toBeCloseTo(-1);
   });
-  it("attend 8 matins notés avant de juger", () => {
+  it("reste visible dans le Track record, marqué « non jugé »", () => {
     const fc = Array.from({ length: 10 }, (_, i) => ({ date: `2026-11-${String(i + 1).padStart(2, "0")}`, score: i }));
-    expect(sunriseScore(fc, fc.slice(0, 3).map((f) => ({ date: f.date, value: 1 }))).status).toBe("collecting");
-    const s = sunriseScore(fc, fc.map((f) => ({ date: f.date, value: f.score > 5 ? 2 : f.score > 2 ? 1 : 0 })));
-    expect(s.status).toBe("met");
+    const s = sunriseScore(fc);
+    expect(s.status).toBe("unjudged");
+    expect(s.result).toBe("Not judged");
   });
 });
 
@@ -198,7 +198,7 @@ describe("corrections de la relecture", () => {
   });
   it("« since » est le début de la fenêtre, pas le jour le plus récent", () => {
     const { fc, obs } = month(10);
-    const v = verify({ fcAirport: [], fcMaroubra: [...fc].reverse(), fcBuoy: [], fcMarine: [], metar: obs, buoy: [], overhead: [], sunrise: [], votes: [] }, T0 + 10 * 86400);
+    const v = verify({ fcAirport: [], fcMaroubra: [...fc].reverse(), fcBuoy: [], fcMarine: [], metar: obs, buoy: [], overhead: [], sunrise: [] }, T0 + 10 * 86400);
     const rain = v.scores.find((s) => s.key === "rain")!;
     expect(Date.parse(rain.since!) / 1000).toBeLessThan(T0 + 86400);
   });
