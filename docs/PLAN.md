@@ -256,6 +256,7 @@ flowchart LR
 - Container App 0,25 vCPU / 0,5 Gio active en continu : une quinzaine de dollars US par mois après la franchise.
 - Job et stockage : quelques dollars.
 - gpt-6.1-sol pour le brief (toutes les 30 min) et le tri des actualités : faible.
+- gpt-6.1-sol pour la lecture des caméras le matin (partie U) : environ 2 USD par mois, plafonné.
 
 ---
 
@@ -726,7 +727,39 @@ Constat, depuis cette session, sur le serveur qui sert réellement les caméras 
   - « unavailable » seulement après 3 minutes sans image ;
   - on touche l'image pour la voir en grand : entière en paysage ; sur un téléphone tenu droit, toute la hauteur de l'écran, qu'on fait glisser le long de la plage.
 - Pour rétablir la vidéo dans la page : relever l'adresse du flux depuis un navigateur ordinaire sur la page de la mairie (outils de développement, onglet Réseau, filtre `m3u8`), puis vérifier qu'elle répond hors de leur site.
+- Confirmé par Samuel le 24 novembre (onglet Réseau de son navigateur) : la page de la mairie passe un reCAPTCHA, puis leur serveur (`scaleenginerequest?video=…`) délivre une clé et un mot de passe de session, collés dans l'adresse du flux (`…/sevu/maroubra_north.smil/playlist.m3u8?key=…&pass=…`). Le flux est donc réservé à leur page : on ne le lit pas chez nous, on ne contourne pas.
 
-### T.3 Idée à discuter : voir s'il y a déjà des surfeurs à l'eau
+## Partie U : surfeurs à l'eau, lus sur les caméras (24 novembre 2026)
 
-Pas commencé : Samuel veut en parler avant. Les éléments pour décider sont dans la conversation du 24 novembre (image de 1280 × 720, un surfeur au large fait quelques pixels ; juge nécessaire avant d'afficher un compte).
+Demande de Samuel : le matin, avant le rapport des sauveteurs, savoir s'il y a déjà des surfeurs à l'eau. « Personne, quelques-uns, beaucoup » lui suffit : sans au moins quelques surfeurs, les conditions ne sont pas pour lui. Contrainte : ne pas alourdir la facture Azure.
+
+### U.1 Ce qui est fait
+
+- Collecteur `surf` (`apps/hub/src/sources/surf-watch.ts`) : il prend l'image directe des deux caméras et la fait lire par gpt-6.1-sol (entrée image, API Responses, détail haut, réponse en JSON strict).
+- Réponse par caméra : `none` (personne), `few` (1 à 5), `many` (6 ou plus), `unclear` (image illisible), avec une note de 12 mots au plus. L'écran garde le plus fort des deux bouts de plage.
+- Affichage : en tête de la carte « Live cams » de la page Beach, pour le jour même, avec l'heure de la lecture, le détail par bout de plage, et la mention « Experimental ».
+- Pas de notification, pas de ligne sur l'accueil : à décider après le jugement (U.3).
+
+### U.2 Coût, borné par construction
+
+| Garde-fou | Valeur |
+|---|---|
+| Fenêtre | de la première lumière (Soleil à moins de 3° sous l'horizon) à 9 h, heure de Sydney |
+| Cadence | une lecture toutes les 30 min au plus : 6 à 8 par matin selon la saison |
+| Plafond | 10 lectures par jour, réussies ou non |
+| Par lecture | 2 images, sortie limitée à 1 000 jetons |
+| Caméra arrêtée (image de plus de 10 min) | pas lue, donc pas payée |
+
+- Prix relevé le 24/11/2026 pour gpt-6.1-sol : 2 USD par million de jetons en entrée, 10 USD en sortie (Global Standard, site azurespeed.com ; la page de prix officielle n'affichait pas de chiffre, et le tarif Data Zone n'est pas confirmé).
+- Estimation par lecture : environ 2 600 jetons en entrée et 350 en sortie, soit à peu près 0,01 USD. Sur un mois : **environ 2 USD**.
+- Pire cas (10 lectures par jour, sortie au maximum, images comptées large) : **environ 6 USD par mois**.
+- Les jetons réellement facturés sont comptés à chaque lecture : journal `surf_look`, et « Today: N readings, X k tokens » dans la carte. L'estimation est à remplacer par la mesure après quelques matins.
+- Container App : rien de plus (elle tourne déjà en continu ; deux images de 110 Ko toutes les 30 min).
+- Stockage : chaque image lue est archivée avec sa lecture (table `archive`, partitions `surf-AAAAMM`, image découpée en morceaux de 60 Ko), soit environ 55 Mo par mois : moins d'un centime. Pas de purge pour l'instant.
+- Aucun changement d'infra.
+
+### U.3 Ce qui n'est pas vérifié
+
+- **La justesse de la lecture n'est pas mesurée.** Le modèle Azure n'est pas joignable depuis la session de développement : la consigne et le format sont testés, pas le jugement du modèle. Sur ces images de 1280 × 720, un surfeur au large fait quelques pixels.
+- Juge prévu : un échantillon d'images archivées, étiquetées à la main (une cinquantaine), comparé aux lectures. D'ici là, la ligne est marquée « Experimental » et les images sont juste en dessous.
+- Si la lecture est mauvaise : découper et agrandir la zone d'eau avant l'envoi, ou comparer plusieurs images de suite (un surfeur bouge, un rocher non).

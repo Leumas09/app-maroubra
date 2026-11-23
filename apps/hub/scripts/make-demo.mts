@@ -119,5 +119,9 @@ writeFileSync(`${out}.png`, render(grid, ref));
 const satellite = { at: new Date(at.getTime() - 20 * 60e3).toISOString(), band: "B13 infrared 10.4 µm", spanKm: 300, clearK: scene, overhead: cloudAt(grid, ref, 0, 0, 10), within50km: cloudAt(grid, ref, 0, 0, 50), alongSunrise: [] };
 
 const warnings = parseWarnings(readFileSync(new URL("../test/fixtures/bom-warnings-nsw-2026-11-21.xml", import.meta.url), "utf8"));
-writeFileSync(out, JSON.stringify({ "buoy-near": nearBuoy, satellite, verify: verification, weather: weatherShown, warnings, metar, marine, buoy, beachStatus, flights, fires, air, space, iss, sunrise, news, beach: b, moments: ms, brief }));
+// Surfeurs à l'eau : une lecture du matin même (exemple), pour voir la ligne dans la carte des caméras.
+const surfAt = new Date(at.getTime() - 25 * 60e3).toISOString();
+const surf = { at: surfAt, crowd: "few", cams: [{ id: "north", crowd: "few", note: "about four sitting off the north rocks" }, { id: "south", crowd: "none", note: "empty line-up, small messy waves" }],
+  budget: { day: surfAt.slice(0, 10), looks: 6, cap: 10, inputTokens: 16800, outputTokens: 2100 } };
+writeFileSync(out, JSON.stringify({ surf, "buoy-near": nearBuoy, satellite, verify: verification, weather: weatherShown, warnings, metar, marine, buoy, beachStatus, flights, fires, air, space, iss, sunrise, news, beach: b, moments: ms, brief }));
 console.log(out, "beach", b.score, b.label, "moments", ms.length, "fires", fires.nearby.length, "brief:", brief.text);

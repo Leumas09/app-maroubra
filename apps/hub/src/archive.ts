@@ -107,6 +107,25 @@ export async function archiveSunriseSky(table: ArchiveTable | null, s: { date: s
     .catch((err) => console.error(JSON.stringify({ event: "archive_failed", error: String(err) })));
 }
 
+/** Une propriété binaire d'Azure Table Storage est limitée à 64 Kio : l'image est découpée. */
+const CHUNK = 60_000;
+
+/**
+ * Lecture des caméras (surfeurs à l'eau) : une ligne par caméra, avec l'image lue, pour pouvoir la juger
+ * plus tard contre un étiquetage à la main. Environ 110 Ko par image, 16 images par matin au plus.
+ */
+export async function archiveSurfLook(table: ArchiveTable | null, l: { at: string; cams: { id: string; crowd: string; note: string }[]; images: { id: string; jpeg: Uint8Array }[]; usage: { inputTokens: number; outputTokens: number } }) {
+  if (!table) return;
+  for (const c of l.cams) {
+    const jpeg = l.images.find((im) => im.id === c.id)?.jpeg;
+    const chunks: Record<string, Uint8Array> = {};
+    if (jpeg) for (let i = 0; i * CHUNK < jpeg.length; i++) chunks[`jpeg${i}`] = jpeg.subarray(i * CHUNK, (i + 1) * CHUNK);
+    await table.upsert({ partitionKey: `surf-${l.at.slice(0, 7).replace("-", "")}`, rowKey: `${l.at}-${c.id}`, at: l.at, cam: c.id, crowd: c.crowd, note: c.note,
+      inputTokens: l.usage.inputTokens, outputTokens: l.usage.outputTokens, bytes: jpeg?.length ?? 0, ...chunks })
+      .catch((err) => console.error(JSON.stringify({ event: "archive_failed", error: String(err) })));
+  }
+}
+
 // Lecture : les partitions de plus de deux jours ne changent plus, on les garde en cache.
 const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) && v > -90 ? v : null);
 /** Hauteurs de vagues : les anciennes lignes notaient « absente » par -1. */
