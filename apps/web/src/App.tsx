@@ -1,6 +1,6 @@
 import { Component, lazy as reactLazy, Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
 import type * as React from "react";
-import type { AirQuality, Beach as BeachData, BeachStatus, Brief, Buoy, Fires, Flights, Iss, Marine, Metar, Moment, News as NewsData, Satellite, SpaceWeather, Sunrise, Verification, Weather as WeatherData, WeatherWarnings } from "@maroubra/core";
+import type { AirQuality, Beach as BeachData, BeachStatus, Brief, Buoy, Fires, Flights, Iss, Marine, Metar, Moment, News as NewsData, Satellite, SpaceWeather, Sunrise, SurfWatch, Verification, Weather as WeatherData, WeatherWarnings } from "@maroubra/core";
 import { data, entry, isDemo, useLive } from "./lib/live";
 import type { SkyModel } from "./lib/sky-model";
 import { loadTide, type TideTable } from "./lib/tide";
@@ -184,7 +184,7 @@ export function App() {
         <Suspense fallback={<div className="card" style={{ minHeight: 320 }} aria-busy="true" />}>
         {current === "home" && <Home now={now} sky={sky} brief={brief?.text ?? null} beach={beach} beachStatus={beachStatus} weather={weather} buoy={buoy} marine={entry<Marine>(snap, "marine")} sunrise={entry<Sunrise>(snap, "sunrise")} space={entry<SpaceWeather>(snap, "space")} moments={moments} />}
         {current === "weather" && <Weather e={weather} metar={entry<Metar>(snap, "metar")} air={air} warnings={entry<WeatherWarnings>(snap, "warnings")} sat={entry<Satellite>(snap, "satellite")} night={!!night} now={now} />}
-        {current === "beach" && <Beach e={beach} status={beachStatus} tide={tide} now={now} buoy={buoy} near={entry<Buoy>(snap, "buoy-near")} marine={entry<Marine>(snap, "marine")} demo={isDemo(snap)} />}
+        {current === "beach" && <Beach e={beach} status={beachStatus} tide={tide} now={now} buoy={buoy} near={entry<Buoy>(snap, "buoy-near")} marine={entry<Marine>(snap, "marine")} surf={data<SurfWatch>(snap, "surf")} demo={isDemo(snap)} />}
         {current === "sky" && (sky ? <Sky s={sky} iss={entry<Iss>(snap, "iss")} space={entry<SpaceWeather>(snap, "space")} sunrise={entry<Sunrise>(snap, "sunrise")} hours={weather?.data?.hourly ?? null} /> : <div className="card" style={{ minHeight: 320 }} aria-busy="true" />)}
         {current === "overhead" && <Overhead e={flights} night={!!night} demo={isDemo(snap)} />}
         {current === "fire" && <FireAir fires={fires} />}

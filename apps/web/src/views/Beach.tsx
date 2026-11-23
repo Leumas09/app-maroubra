@@ -1,6 +1,6 @@
 // La plage : d'abord le statut officiel (sauveteurs, Beachwatch, Beachsafe), puis notre score expliqué,
 // le ruban horaire qui montre pourquoi le meilleur créneau est le meilleur, les instruments et les webcams.
-import type { Beach as B, BeachStatus, Buoy, Marine, SourceEntry, SwimHour } from "@maroubra/core";
+import type { Beach as B, BeachStatus, Buoy, Marine, SourceEntry, SurfCrowd, SurfWatch, SwimHour } from "@maroubra/core";
 import { BeachCompass, DayRibbon, FactorBars, Scale, UV_ZONES, WATER_ZONES, scoreColor } from "../components/beach-viz";
 import { Flag, officialStatus } from "../components/beach-status";
 import { CardHead, Empty, Fresh } from "../components/bits";
@@ -188,10 +188,33 @@ function CamView({ id, name, where, offline }: { id: string; name: string; where
   );
 }
 
-function Cams({ photo, photoAt, offline }: { photo: string | null; photoAt: string | null; offline: boolean }) {
+const SURF_WORD: Record<SurfCrowd, string> = { none: "none seen", few: "a few", many: "plenty", unclear: "can't tell" };
+const SURF_END: Record<"north" | "south", string> = { north: "North end", south: "South end" };
+
+/**
+ * Surfeurs à l'eau, lus sur les images des caméras par le modèle de vision, le matin seulement.
+ * Affiché pour le jour même ; expérimental tant que la lecture n'est pas jugée contre des images étiquetées.
+ */
+function SurfLine({ surf, now }: { surf: SurfWatch | null; now: Date }) {
+  if (!surf?.at || sydneyDay(new Date(surf.at)) !== sydneyDay(now)) return null;
+  const b = surf.budget;
+  const tokens = b.inputTokens + b.outputTokens;
+  return (
+    <div className={`surf-line ${surf.crowd}`} role="status">
+      <p className="surf-main"><span className="surf-k">Surfers out</span> <strong>{SURF_WORD[surf.crowd]}</strong> <span className="muted">at {time(new Date(surf.at))}</span></p>
+      <ul className="surf-cams">
+        {surf.cams.map((c) => <li key={c.id}><span className="muted">{SURF_END[c.id]}:</span> {SURF_WORD[c.crowd]}{c.note ? `, ${c.note.replace(/\.$/, "")}` : ""}</li>)}
+      </ul>
+      <p className="note">Experimental: a model reads the two images every 30 min from first light to 9:00, {b.cap} times a day at most. Today: {b.looks} {b.looks === 1 ? "reading" : "readings"}{tokens ? `, ${Math.round(tokens / 1000)}k tokens` : ""}. Check it against the images.</p>
+    </div>
+  );
+}
+
+function Cams({ photo, photoAt, offline, surf, now }: { photo: string | null; photoAt: string | null; offline: boolean; surf: SurfWatch | null; now: Date }) {
   return (
     <div className="card">
       <CardHead title="Live cams"><span className="fresh">Randwick City Council</span></CardHead>
+      <SurfLine surf={surf} now={now} />
       <div className="cams">
         <CamView id="maroubra_north" name="Maroubra" where="North end of the beach" offline={offline} />
         <CamView id="maroubra_south" name="Maroubra South" where="South end of the beach" offline={offline} />
@@ -208,9 +231,9 @@ function verdict(b: B, daylight: boolean, closed: boolean): string {
   return { Great: "Great for a swim right now.", Good: "Good for a swim right now.", Fair: "Fair: swimmable, with care.", Poor: "Poor conditions for a swim.", "Stay out": "Stay out of the water." }[b.label];
 }
 
-interface Props { e: E<B>; status: E<BeachStatus>; tide: TideTable | null; now: Date; buoy: E<Buoy>; near?: E<Buoy>; marine: E<Marine>; demo: boolean }
+interface Props { e: E<B>; status: E<BeachStatus>; tide: TideTable | null; now: Date; buoy: E<Buoy>; near?: E<Buoy>; marine: E<Marine>; surf?: SurfWatch | null; demo: boolean }
 
-export function Beach({ e, status, tide, now, buoy, near, marine, demo }: Props) {
+export function Beach({ e, status, tide, now, buoy, near, marine, surf = null, demo }: Props) {
   const b = e?.data;
   const official = <OfficialStatus e={status} now={now} />;
   const sea = <SeaSection table={tide} now={now} buoy={buoy} near={near} marine={marine} />;
@@ -266,7 +289,7 @@ export function Beach({ e, status, tide, now, buoy, near, marine, demo }: Props)
           <FactorBars reasons={b.reasons} score={b.score} />
           <p className="note">The score starts at 10; each factor takes points off, as a lifeguard would weigh it. Every forecast is checked in the Track record.</p>
         </div>
-        <Cams photo={lg?.today ? lg.photo : null} photoAt={lg?.at ?? null} offline={demo} />
+        <Cams photo={lg?.today ? lg.photo : null} photoAt={lg?.at ?? null} offline={demo} surf={surf} now={now} />
       </div>
       {sea}
     </section>

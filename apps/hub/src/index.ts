@@ -1,6 +1,6 @@
 import { serve } from "@hono/node-server";
 import type { Beach, BeachStatus, Buoy, Fires, Flights, Iss, Marine, Moment, SpaceWeather, Sunrise, Weather } from "@maroubra/core";
-import { archiveHour, archiveOutcome, archiveSunriseSky, archiveReader, memoryArchive, tableArchive, type ArchiveTable } from "./archive";
+import { archiveHour, archiveOutcome, archiveSunriseSky, archiveSurfLook, archiveReader, memoryArchive, tableArchive, type ArchiveTable } from "./archive";
 import { startCollectors, Waiting, type Collector } from "./collector";
 import { loadConfig } from "./config";
 import { beach } from "./derive/beach";
@@ -17,6 +17,7 @@ import { areaFinder, flightShared, flightsCollector } from "./sources/flights";
 import { air, fires, space } from "./sources/hazards";
 import { issCollector } from "./sources/iss";
 import { newsCollector } from "./sources/news";
+import { surfWatchCollector } from "./sources/surf-watch";
 import { beachStatus } from "./sources/beach-status";
 import { satelliteCollector } from "./sources/himawari";
 import { buoy, buoyForecast, marine, nearshoreBuoy } from "./sources/sea";
@@ -92,7 +93,8 @@ const flights = flightShared();
 
 const collectors: Collector[] = [
   weather, metar, warnings, marine, buoy, nearshoreBuoy, airportForecast, buoyForecast, beachStatus, flightsCollector(flights, (o) => void archiveOutcome(archive, o)),
-  satelliteCollector({ onImage: (png) => { satellitePng = png; }, onSunrise: (s) => void archiveSunriseSky(archive, s) }), fires, air, space, issCollector(), sunrise, newsCollector(llm), ...derived,
+  satelliteCollector({ onImage: (png) => { satellitePng = png; }, onSunrise: (s) => void archiveSunriseSky(archive, s) }), fires, air, space, issCollector(), sunrise, newsCollector(llm),
+  surfWatchCollector(llm, { onLook: (l) => void archiveSurfLook(archive, l) }), ...derived,
 ];
 startCollectors(store, collectors, { offline: cfg.offline });
 

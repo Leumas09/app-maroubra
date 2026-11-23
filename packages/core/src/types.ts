@@ -434,3 +434,20 @@ export interface BeachStatus {
   water: { forecast: "Unlikely" | "Possible" | "Likely" | null; latest: string | null; at: string | null } | null;
   errors: string[];
 }
+
+/** Surfeurs vus sur les caméras de la plage : « none » personne, « few » 1 à 5, « many » 6 ou plus, « unclear » image illisible. */
+export type SurfCrowd = "none" | "few" | "many" | "unclear";
+
+/**
+ * Lecture des images des caméras par le modèle de vision, le matin seulement (docs/PLAN.md, partie U).
+ * Expérimental : pas encore jugé contre des images étiquetées.
+ */
+export interface SurfWatch {
+  /** Heure de la dernière lecture (ISO), null tant qu'aucune n'a eu lieu. */
+  at: string | null;
+  /** Le plus fort des deux bouts de plage. */
+  crowd: SurfCrowd;
+  cams: { id: "north" | "south"; crowd: SurfCrowd; note: string }[];
+  /** Garde-fou de coût : lectures et jetons facturés du jour (heure de Sydney), plafond de lectures par jour. */
+  budget: { day: string; looks: number; cap: number; inputTokens: number; outputTokens: number };
+}

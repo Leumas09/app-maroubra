@@ -3,8 +3,16 @@
 // Source : learn.microsoft.com/azure/foundry/foundry-models/how-to/configure-entra-id
 import type { TokenCredential } from "@azure/identity";
 
+/** Jetons facturés d'un appel (les jetons de raisonnement comptent dans la sortie). */
+export interface Usage { inputTokens: number; outputTokens: number }
+
 export interface Llm {
   text(instructions: string, input: string, maxTokens?: number): Promise<string>;
+  /**
+   * Lit des images JPEG et répond selon un schéma JSON strict. Renvoie aussi les jetons facturés,
+   * pour suivre le coût réel. Learn : learn.microsoft.com/azure/foundry/openai/how-to/responses#image-input
+   */
+  look(instructions: string, images: { label: string; jpeg: Uint8Array }[], format: { name: string; schema: Record<string, unknown> }, maxTokens?: number): Promise<{ json: unknown; usage: Usage }>;
   triageNews(items: { id: string; title: string; source: string }[]): Promise<{ id: string; local: boolean; topic: string; summary: string }[]>;
 }
 
@@ -21,7 +29,7 @@ export function outputText(j: { output_text?: string; output?: { type: string; c
 
 export function foundryLlm(endpoint: string, deployment: string, credential: TokenCredential): Llm {
   const base = endpoint.replace(/\/+$/, "");
-  async function call(body: Record<string, unknown>): Promise<string> {
+  async function raw(body: Record<string, unknown>): Promise<{ text: string; usage: Usage }> {
     const token = await credential.getToken("https://ai.azure.com/.default");
     if (!token) throw new Error("no token for Foundry");
     const res = await fetch(`${base}/openai/v1/responses`, {
@@ -31,9 +39,23 @@ export function foundryLlm(endpoint: string, deployment: string, credential: Tok
       signal: AbortSignal.timeout(60_000),
     });
     if (!res.ok) throw new Error(`Foundry ${res.status}: ${(await res.text()).slice(0, 200)}`);
-    return outputText(await res.json());
+    const j = await res.json() as Parameters<typeof outputText>[0] & { usage?: { input_tokens?: number; output_tokens?: number } };
+    return { text: outputText(j), usage: { inputTokens: j.usage?.input_tokens ?? 0, outputTokens: j.usage?.output_tokens ?? 0 } };
   }
+  const call = async (body: Record<string, unknown>) => (await raw(body)).text;
   return {
+    async look(instructions, images, format, maxTokens = 1000) {
+      const content = images.flatMap((im) => [
+        { type: "input_text", text: im.label },
+        { type: "input_image", image_url: `data:image/jpeg;base64,${Buffer.from(im.jpeg).toString("base64")}`, detail: "high" },
+      ]);
+      const { text, usage } = await raw({
+        instructions, input: [{ role: "user", content }], max_output_tokens: maxTokens,
+        text: { format: { type: "json_schema", name: format.name, strict: true, schema: format.schema } },
+      });
+      // Une réponse vide ou coupée est une erreur, mais ses jetons sont facturés : on les rend avec l'erreur.
+      try { return { json: JSON.parse(text), usage }; } catch { throw Object.assign(new Error("model answer is not JSON"), { usage }); }
+    },
     text: (instructions, input, maxTokens = 400) => call({ instructions, input, max_output_tokens: maxTokens }),
     async triageNews(items) {
       const out = await call({

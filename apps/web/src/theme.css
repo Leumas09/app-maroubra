@@ -429,6 +429,13 @@ th { color: var(--muted); font-weight: 500; }
 .f-pts { font-size: 13px; color: var(--miss-ink); text-align: right; font-weight: 600; }
 .f-sum { margin: 0; padding-top: 10px; border-top: 1px solid var(--rule); text-align: right; color: var(--muted); }
 .f-sum strong { color: var(--ink); font-size: 18px; }
+/* Surfeurs à l'eau (lecture des caméras, expérimental). */
+.surf-line { margin: 0 0 14px; padding: 10px 14px; border-radius: 12px; background: var(--paper-3); border-left: 4px solid var(--muted); }
+.surf-line.few, .surf-line.many { border-left-color: var(--good); }
+.surf-main { margin: 0; font-size: 17px; }
+.surf-k { color: var(--muted); }
+.surf-cams { margin: 4px 0 0; padding: 0; list-style: none; font-size: 14px; }
+.surf-line .note { margin: 6px 0 0; }
 .cams { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .cam { display: block; color: var(--ink); text-decoration: none; }
 .cam-view { position: relative; aspect-ratio: 16 / 9; border-radius: 14px; overflow: hidden; background: var(--paper-3); box-shadow: var(--edge-light), var(--shadow-panel); }
