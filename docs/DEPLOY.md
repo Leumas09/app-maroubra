@@ -128,6 +128,19 @@ curl -s -o /dev/null -w "%{http_code} %{redirect_url}\n" https://maroubra.apps.a
 
 Dans `/health`, chaque source doit passer à `ok: true` dans les minutes qui suivent. Une source restée à `false` affiche son erreur, sans bloquer les autres.
 
+## Changements ciblés (sans repasser les secrets)
+
+Redéployer `infra/main.bicep` oblige à repasser les trois secrets, et régénère la clé de session et les clés VAPID. Pour un changement qui ne touche ni les identités ni les secrets, appliquer seulement la ressource concernée, avec des commandes `az` qui reproduisent exactement le Bicep. Exemple du 25/11/2026 (partie V du plan), depuis PowerShell :
+
+```powershell
+$acct = az cognitiveservices account list -g rg-app-maroubra --query "[0].name" -o tsv
+az cognitiveservices account deployment create -g rg-app-maroubra -n $acct --deployment-name gpt-6-luna --model-name gpt-6-luna --model-version 2026-09-22 --model-format OpenAI --sku-name GlobalStandard --sku-capacity 20 --query "properties.provisioningState" -o tsv
+az containerapp update -n maroubra -g rg-app-maroubra --cpu 0.25 --memory 0.5Gi --min-replicas 0 --max-replicas 1 --scale-rule-name jour --scale-rule-type cron --scale-rule-metadata timezone=Australia/Sydney "start=30 6 * * *" "end=30 22 * * *" desiredReplicas=1 --set-env-vars FOUNDRY_DEPLOYMENT=gpt-6-luna --query "properties.latestRevisionName" -o tsv
+az cognitiveservices account deployment delete -g rg-app-maroubra -n $acct --deployment-name gpt-6.1-sol
+```
+
+Le Bicep reste la référence : il décrit déjà cet état, un redéploiement complet ne change donc rien.
+
 ## Plus tard
 
 - **Redéployer l'infra** : passer `containerImage=crkiwiapps.azurecr.io/maroubra:<sha en place>`, sinon l'app repart sur l'image de démonstration. Il faut aussi repasser les secrets (paramètres sécurisés).

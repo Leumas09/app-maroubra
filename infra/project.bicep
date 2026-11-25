@@ -79,9 +79,10 @@ resource app 'Microsoft.App/containerApps@2026-07-01' = {
         {
           name: name
           image: containerImage
+          // Demi-taille depuis le 25/11/2026 (coût) : 0,25 vCPU et 0,5 Gio, couple accepté par le plan Consumption.
           resources: {
-            cpu: json('0.5')
-            memory: '1Gi'
+            cpu: json('0.25')
+            memory: '0.5Gi'
           }
           env: [
             { name: 'PORT', value: '8080' }
@@ -110,9 +111,28 @@ resource app 'Microsoft.App/containerApps@2026-07-01' = {
           ]
         }
       ]
+      // Éteinte la nuit, de 22 h 30 à 6 h 30 à Sydney (demande de Samuel du 25/11/2026, coût) : une réplique
+      // de jour par la règle cron de KEDA, zéro sinon (arrêt effectif après les 300 s de refroidissement).
+      // Sans règle HTTP, une visite la nuit ne réveille pas l'app. Garder en accord avec apps/hub/src/night.ts.
+      // Learn : https://learn.microsoft.com/azure/container-apps/scale-app#custom
+      //         https://learn.microsoft.com/azure/container-apps/billing#no-replicas-are-running
       scale: {
-        minReplicas: 1
+        minReplicas: 0
         maxReplicas: 1
+        rules: [
+          {
+            name: 'jour'
+            custom: {
+              type: 'cron'
+              metadata: {
+                timezone: 'Australia/Sydney'
+                start: '30 6 * * *'
+                end: '30 22 * * *'
+                desiredReplicas: '1'
+              }
+            }
+          }
+        ]
       }
     }
   }

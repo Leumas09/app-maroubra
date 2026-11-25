@@ -1,10 +1,12 @@
-// Microsoft Foundry : compte AIServices et déploiement du modèle gpt-6.1-sol (Data Zone Standard
-// Asie-Pacifique, disponible en Australia East, sans demande d'accès). Appelé par l'identité managée
-// de l'app, sans clé : authentification locale désactivée.
-// Data Zone Standard plutôt que Global Standard : le quota Global Standard d'un modèle est un pool
-// unique pour toute la souscription, toutes régions confondues, et il est déjà consommé par d'autres
-// projets (capacité disponible 0 au 31/10/2026). Le quota Data Zone est séparé, par zone de données,
-// et le traitement reste en Asie-Pacifique.
+// Microsoft Foundry : compte AIServices et déploiement du modèle gpt-6-luna (Global Standard, Australia East).
+// Appelé par l'identité managée de l'app, sans clé : authentification locale désactivée.
+// Le 25/11/2026, passage de gpt-6.1-sol à gpt-6-luna, moins cher (décision de Samuel). gpt-6-luna n'est pas
+// proposé en Data Zone Standard Asie-Pacifique, d'où le Global Standard pour ce modèle.
+// Learn : https://learn.microsoft.com/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure#gpt-6
+//         https://learn.microsoft.com/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure-region-availability#global-standard
+// Historique : gpt-6.1-sol tournait en Data Zone Standard, car le quota Global Standard de ce modèle (pool
+// unique de la souscription) était consommé par d'autres projets au 31/10/2026. Le quota est compté par
+// modèle : celui de gpt-6-luna est à part.
 // Learn : https://learn.microsoft.com/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure#gpt-61
 //         https://learn.microsoft.com/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure-region-availability#data-zone-standard
 //         https://learn.microsoft.com/azure/foundry/foundry-models/quotas-limits#subscription-level-quota-management
@@ -14,11 +16,11 @@ param location string
 param tags object
 param accountName string
 param runIdentityName string
-param modelName string = 'gpt-6.1-sol'
-param modelVersion string = '2026-09-29'
+param modelName string = 'gpt-6-luna'
+param modelVersion string = '2026-09-22'
 @description('Type de déploiement : DataZoneStandard (quota libre) ou GlobalStandard (quota partagé de la souscription).')
 @allowed(['DataZoneStandard', 'GlobalStandard'])
-param modelSku string = 'DataZoneStandard'
+param modelSku string = 'GlobalStandard'
 @description('Capacité en milliers de jetons par minute.')
 param modelCapacity int = 20
 

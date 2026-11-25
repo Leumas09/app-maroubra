@@ -45,7 +45,7 @@ param vapidPrivateKey string
 
 param vapidSubject string = 'mailto:samuel.fondrillon@gmail.com'
 
-@description('Capacité du déploiement gpt-6.1-sol, en milliers de jetons par minute.')
+@description('Capacité du déploiement du modèle, en milliers de jetons par minute.')
 param modelCapacity int = 20
 
 @description('Socle : groupe, environnement Container Apps et registre.')
@@ -67,7 +67,9 @@ var runIdentityName = 'id-${name}-run'
 var ciIdentityName = 'id-${name}-ci'
 var storageName = take('st${name}${uniqueString(rg.id)}', 24)
 var aiAccountName = 'ai-${name}-${uniqueString(rg.id)}'
-var modelName = 'gpt-6.1-sol'
+// Modèle et version : gpt-6-luna depuis le 25/11/2026 (infra/ai.bicep). Le nom du déploiement est celui du modèle.
+var modelName = 'gpt-6-luna'
+var modelVersion = '2026-09-22'
 
 resource rg 'Microsoft.Resources/resourceGroups@2025-04-01' = {
   name: rgName
@@ -127,6 +129,8 @@ module ai 'ai.bicep' = {
     accountName: aiAccountName
     runIdentityName: runIdentityName
     modelName: modelName
+    modelVersion: modelVersion
+    modelSku: 'GlobalStandard'
     modelCapacity: modelCapacity
   }
   dependsOn: [

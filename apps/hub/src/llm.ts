@@ -1,4 +1,4 @@
-// Modèle gpt-6.1-sol déployé dans Microsoft Foundry, appelé par l'API Responses avec l'identité
+// Modèle gpt-6-luna (gpt-6.1-sol avant le 25/11/2026) déployé dans Microsoft Foundry, appelé par l'API Responses avec l'identité
 // managée de l'app (Microsoft Entra ID, jeton de portée https://ai.azure.com/.default) : aucune clé.
 // Source : learn.microsoft.com/azure/foundry/foundry-models/how-to/configure-entra-id
 import type { TokenCredential } from "@azure/identity";

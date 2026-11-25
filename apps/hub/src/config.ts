@@ -31,7 +31,7 @@ export function loadConfig(): Config {
     secureCookies: env("COOKIE_SECURE", "1") === "1",
     version: env("APP_VERSION", "dev")!,
     offline: env("OFFLINE", "0") === "1",
-    foundry: { endpoint: env("FOUNDRY_ENDPOINT"), deployment: env("FOUNDRY_DEPLOYMENT", "gpt-6.1-sol")! },
+    foundry: { endpoint: env("FOUNDRY_ENDPOINT"), deployment: env("FOUNDRY_DEPLOYMENT", "gpt-6-luna")! },
     tableEndpoint: env("TABLE_ENDPOINT"),
     vapid: { publicKey: env("VAPID_PUBLIC_KEY"), privateKey: env("VAPID_PRIVATE_KEY"), subject: env("VAPID_SUBJECT", "mailto:admin@akakiwi.com")! },
     managedIdentityClientId: env("AZURE_CLIENT_ID"),

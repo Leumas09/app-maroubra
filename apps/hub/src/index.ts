@@ -10,6 +10,7 @@ import { sunrise } from "./derive/sunrise";
 import { loadTide } from "./derive/tide";
 import { verify } from "./derive/verify";
 import { foundryLlm } from "./llm";
+import { dayOnly } from "./night";
 import { photoFinder } from "./photos";
 import { Push } from "./push";
 import { createApp } from "./server";
@@ -82,7 +83,8 @@ const derived: Collector[] = [
     id: "brief", everyMs: 30 * 60e3, staleAfterMs: 2 * 3600e3,
     run: async ({ store: s, now }) => {
       if (!s.data("weather")) throw new Waiting("weather");
-      return writeBrief(llm, facts(s.data<Weather>("weather"), s.data<Beach>("beach"), tideNext(now), s.data<Moment[]>("moments") ?? [], now), now);
+      // La nuit, brief par règles : aucun appel au modèle (src/night.ts).
+      return writeBrief(dayOnly(llm, now), facts(s.data<Weather>("weather"), s.data<Beach>("beach"), tideNext(now), s.data<Moment[]>("moments") ?? [], now), now);
     },
   },
 ];

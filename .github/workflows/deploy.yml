@@ -82,6 +82,13 @@ jobs:
 
       - name: Vérification du déploiement
         run: |
+          # L'app est éteinte de 22 h 30 à 6 h 30 à Sydney (infra/project.bicep) : rien à vérifier, la nouvelle
+          # image démarre au réveil. Marge de 10 min autour des bornes (démarrage, refroidissement).
+          hm=$(TZ=Australia/Sydney date +%H%M)
+          if [ "$hm" -ge 2220 ] || [ "$hm" -lt 0640 ]; then
+            echo "App éteinte la nuit à Sydney ($hm) : image en place, vérification au prochain déploiement de jour."
+            exit 0
+          fi
           for i in $(seq 1 30); do
             h=$(curl -sf "https://$APP_NAME.apps.akakiwi.com/health" || true)
             v=$(echo "$h" | jq -r .version 2>/dev/null || true)

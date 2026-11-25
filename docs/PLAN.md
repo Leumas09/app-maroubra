@@ -765,3 +765,38 @@ Demande de Samuel : le matin, avant le rapport des sauveteurs, savoir s'il y a d
 - **La justesse de la lecture n'est pas mesurée.** Le modèle Azure n'est pas joignable depuis la session de développement : la consigne et le format sont testés, pas le jugement du modèle. Sur ces images de 1280 × 720, un surfeur au large fait quelques pixels.
 - Juge prévu : un échantillon d'images archivées, étiquetées à la main (une cinquantaine), comparé aux lectures. D'ici là, la ligne est marquée « Experimental » et les images sont juste en dessous.
 - Si la lecture est mauvaise : découper et agrandir la zone d'eau avant l'envoi, ou comparer plusieurs images de suite (un surfeur bouge, un rocher non).
+
+## Partie V : économies (25 novembre 2026)
+
+Demande de Samuel : la facture mesurée (environ 17 € par mois sans la lecture des caméras, voir ci-dessous) est trop élevée pour un écran familial. Décisions du 25/11/2026 :
+
+| Changement | Où | Économie estimée |
+|---|---|---|
+| Lecture des caméras (partie U) désactivée | version 1.2.1 | jusqu'à 6 €/mois |
+| Aucun appel au modèle de 22 h 30 à 6 h 30 (Sydney) : brief par règles, actualités par mots-clés | `apps/hub/src/night.ts`, version 1.3.0 | un tiers des appels au modèle |
+| Serveur éteint de 22 h 30 à 6 h 30 (règle cron de KEDA, zéro réplique la nuit) | `infra/project.bicep` | un tiers du coût de la Container App |
+| Serveur réduit de moitié : 0,25 vCPU et 0,5 Gio | `infra/project.bicep` | la moitié du coût restant de la Container App |
+| Modèle gpt-6-luna (2026-09-22) au lieu de gpt-6.1-sol, en Global Standard | `infra/ai.bicep`, `infra/main.bicep` | selon l'écart de tarif connu de Samuel |
+
+### V.1 Coût mesuré avant les changements
+
+Requête Cost Management du 25/11/2026, jours complets de fonctionnement (20 au 23 novembre) :
+
+| Poste | Par jour | Par mois |
+|---|---|---|
+| Modèle (Foundry Models) | 0,19 € | 5,7 € |
+| Container App | 0,18 € | 5,4 € |
+| Socle partagé (`rg-kiwi-apps` : registre, DNS, journaux, stockage) | 0,21 € | 6,4 € |
+
+### V.2 Vérifications faites
+
+- **Mémoire.** Le hub lancé en direct sur les sources réelles pendant 3 min 30 : environ 100 Mo en régime, pic à 124 Mo, processeur moyen sous 0,01 vCPU. 0,5 Gio suffit.
+- **Modèle.** gpt-6-luna gère l'API Responses, les réponses en JSON strict et l'effort de raisonnement ([Learn](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure#gpt-6)). Il n'est pas proposé en Data Zone Standard Asie-Pacifique, seulement en Global Standard en Australia East ([Learn](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure-region-availability#global-standard)).
+- **Règle de nuit.** Tests `apps/hub/test/night.test.ts` : bornes de 22 h 30 et 6 h 30, heure d'hiver, aucun appel au modèle la nuit pour le brief et les actualités.
+- **Workflow.** La nuit, l'étape de vérification de `deploy` ne cherche pas la version servie (l'app est éteinte).
+
+### V.3 Application, et ce qu'on accepte
+
+- Samuel a renoncé au what-if pour ce changement (« pas de what-if, c'est une application pour moi »). Pour ne pas repasser les secrets, l'infra est appliquée par deux commandes `az` ciblées qui reproduisent exactement le Bicep : `docs/DEPLOY.md`, section « Changements ciblés ».
+- Acceptés : une visite la nuit ne réveille pas l'app (pas de règle HTTP) ; le Track record n'a plus de relevés horaires la nuit ; les notifications de nuit (aurores, passages de satellites) ne partent plus ; démarrage à froid à 6 h 30, les sources se remplissent dans les minutes qui suivent.
+- La qualité du tri des actualités par gpt-6-luna reste à comparer à son juge (précision visée d'au moins 90 %, partie B.4).

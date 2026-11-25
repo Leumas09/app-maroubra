@@ -7,6 +7,7 @@ import { createHash } from "node:crypto";
 import { fetchText } from "../http";
 import type { Collector } from "../collector";
 import type { Llm } from "../llm";
+import { dayOnly } from "../night";
 
 export const PLACES = ["Maroubra", "Randwick", "Coogee", "Malabar", "Matraville", "Kingsford", "Little Bay", "La Perouse", "Kensington", "Clovelly", "South Coogee", "Chifley", "Phillip Bay"];
 
@@ -52,19 +53,21 @@ export function newsCollector(llm: Llm | null): Collector<News> {
     id: "news",
     everyMs: 20 * 60e3,
     staleAfterMs: 6 * 3600e3,
-    run: async () => {
+    run: async ({ now }) => {
       const items = dedupe(parseRss(await fetchText(newsUrl()))).slice(0, 40);
       const todo = items.filter((i) => !triaged.has(i.id));
       let by: News["triagedBy"] = "keywords";
-      if (llm && todo.length) {
+      // La nuit, pas de modèle : les nouveaux titres passent au filtre par mots-clés, triés au matin.
+      const model = dayOnly(llm, now);
+      if (model && todo.length) {
         try {
-          const res = await llm.triageNews(todo.map((i) => ({ id: i.id, title: i.title, source: i.source })));
+          const res = await model.triageNews(todo.map((i) => ({ id: i.id, title: i.title, source: i.source })));
           for (const r of res) triaged.set(r.id, { local: r.local, topic: r.topic, summary: r.summary });
           by = "model";
         } catch (err) {
           console.error(JSON.stringify({ event: "news_triage_failed", error: String(err) }));
         }
-      } else if (llm) by = "model";
+      } else if (llm && !todo.length) by = "model"; // tout est déjà trié par le modèle
       const out = items.map((i) => ({ ...i, ...(triaged.get(i.id) ?? { local: keywordLocal(i.title) }) }));
       return { items: out.filter((i) => i.local !== false).slice(0, 25), triagedBy: by };
     },
