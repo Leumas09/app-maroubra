@@ -731,6 +731,8 @@ Constat, depuis cette session, sur le serveur qui sert réellement les caméras 
 
 ## Partie U : surfeurs à l'eau, lus sur les caméras (24 novembre 2026)
 
+> **Désactivé le 25 novembre 2026 (version 1.2.1).** Samuel juge le coût d'exploitation trop élevé pour un « nice to have ». Le collecteur n'est plus lancé par le hub (`apps/hub/src/index.ts`), la ligne « Surfers out » disparaît donc de la page Beach. Le code et ses tests restent en place : pour réactiver, remettre `surfWatchCollector` dans la liste des collecteurs.
+
 Demande de Samuel : le matin, avant le rapport des sauveteurs, savoir s'il y a déjà des surfeurs à l'eau. « Personne, quelques-uns, beaucoup » lui suffit : sans au moins quelques surfeurs, les conditions ne sont pas pour lui. Contrainte : ne pas alourdir la facture Azure.
 
 ### U.1 Ce qui est fait
