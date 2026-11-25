@@ -1,9 +1,9 @@
 // Nuit de l'app (demande de Samuel du 25/11/2026) : de 22 h 30 à 6 h 30, heure de Sydney.
-// Le serveur est éteint pendant ce temps par la règle de mise à l'échelle cron (infra/project.bicep).
-// S'il tourne quand même (révision démarrée la nuit, décalage de la règle), aucun modèle n'est appelé :
-// le brief passe aux règles et les actualités au filtre par mots-clés.
+// Depuis le 26/11/2026, l'app dort dès que personne ne la regarde (infra/project.bicep) ; si on l'ouvre
+// la nuit, elle se réveille mais n'appelle aucun modèle : le brief passe aux règles et les actualités
+// au filtre par mots-clés.
 
-/** Début et fin de la nuit, en minutes depuis minuit à Sydney. Garder en accord avec infra/project.bicep. */
+/** Début et fin de la nuit, en minutes depuis minuit à Sydney. */
 export const NIGHT = { start: 22 * 60 + 30, end: 6 * 60 + 30 } as const;
 
 export function sydneyMinutes(now: Date): number {

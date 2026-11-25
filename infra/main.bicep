@@ -166,6 +166,27 @@ module project 'project.bicep' = {
   ]
 }
 
+// Relevé horaire du Track record pendant que l'app dort (partie W du plan). Sans secret : déployable seul.
+module job 'job.bicep' = {
+  name: 'job-${name}'
+  scope: rg
+  params: {
+    name: name
+    location: location
+    tags: tags
+    containerImage: containerImage
+    environmentId: resourceId(subscription().subscriptionId, platform.resourceGroup, 'Microsoft.App/managedEnvironments', platform.environment)
+    registryServer: '${platform.registry}${environment().suffixes.acrLoginServer}'
+    runIdentityName: runIdentityName
+    ciIdentityName: ciIdentityName
+    storageName: storageName
+  }
+  dependsOn: [
+    acrRoles
+    data
+  ]
+}
+
 output appUrl string = 'https://${name}.apps.akakiwi.com'
 output ciClientId string = identities.outputs.ciClientId
 output tenantId string = tenant().tenantId

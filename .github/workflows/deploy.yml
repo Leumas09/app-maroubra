@@ -80,15 +80,18 @@ jobs:
             --image "$IMAGE" \
             --query "properties.latestRevisionName" -o tsv
 
+      - name: Mise à jour de la tâche de relevé horaire
+        run: |
+          # Même image que l'app (commande job.mjs). Tolérant tant que la tâche n'est pas créée (infra/job.bicep).
+          if az containerapp job show --name "$APP_NAME-releve" --resource-group "rg-app-$APP_NAME" --query name -o tsv >/dev/null 2>&1; then
+            az containerapp job update --name "$APP_NAME-releve" --resource-group "rg-app-$APP_NAME" --image "$IMAGE" --query name -o tsv
+          else
+            echo "::warning::Tâche $APP_NAME-releve absente ou inaccessible : image non mise à jour (docs/DEPLOY.md, Changements ciblés)."
+          fi
+
       - name: Vérification du déploiement
         run: |
-          # L'app est éteinte de 22 h 30 à 6 h 30 à Sydney (infra/project.bicep) : rien à vérifier, la nouvelle
-          # image démarre au réveil. Marge de 10 min autour des bornes (démarrage, refroidissement).
-          hm=$(TZ=Australia/Sydney date +%H%M)
-          if [ "$hm" -ge 2220 ] || [ "$hm" -lt 0640 ]; then
-            echo "App éteinte la nuit à Sydney ($hm) : image en place, vérification au prochain déploiement de jour."
-            exit 0
-          fi
+          # L'app dort au repos : la première requête la réveille (une vingtaine de secondes), la boucle attend.
           for i in $(seq 1 30); do
             h=$(curl -sf "https://$APP_NAME.apps.akakiwi.com/health" || true)
             v=$(echo "$h" | jq -r .version 2>/dev/null || true)

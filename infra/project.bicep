@@ -1,6 +1,8 @@
 // Container App « maroubra » et droit de mise à jour de la CI sur elle seule.
 // Déployée après acr-roles.bicep : sans AcrPull, Container Apps ne peut pas configurer le registre.
-// Un seul réplica, toujours actif : les collecteurs tiennent l'état en mémoire et ne doivent pas tourner en double.
+// Au plus un réplica : les collecteurs tiennent l'état en mémoire et ne doivent pas tourner en double.
+// Depuis le 26/11/2026, l'app dort quand personne ne la regarde (règle HTTP, zéro réplique au repos) ;
+// le relevé horaire du Track record passe par la tâche planifiée de job.bicep.
 // Learn : https://learn.microsoft.com/azure/container-apps/scale-app#scale-definition
 //         https://learn.microsoft.com/azure/container-apps/manage-secrets#referencing-secrets-in-environment-variables
 param name string
@@ -111,25 +113,23 @@ resource app 'Microsoft.App/containerApps@2026-07-01' = {
           ]
         }
       ]
-      // Éteinte la nuit, de 22 h 30 à 6 h 30 à Sydney (demande de Samuel du 25/11/2026, coût) : une réplique
-      // de jour par la règle cron de KEDA, zéro sinon (arrêt effectif après les 300 s de refroidissement).
-      // Constaté le 25/11/2026 à 23 h : une visite la nuit réveille quand même l'app (démarrage à froid d'une
-      // vingtaine de secondes), qui se rendort ensuite. Garder en accord avec apps/hub/src/night.ts.
-      // Learn : https://learn.microsoft.com/azure/container-apps/scale-app#custom
+      // À la demande (option B choisie par Samuel le 26/11/2026, partie W du plan) : zéro réplique au repos ;
+      // la première requête réveille l'app (démarrage à froid d'une vingtaine de secondes), qui se rendort
+      // 300 s après la dernière requête (refroidissement par défaut). Le flux temps réel ouvert par l'écran
+      // devrait compter comme une requête en cours et garder l'app éveillée tant qu'une page est ouverte :
+      // à vérifier en production (partie W du plan).
+      // Learn : https://learn.microsoft.com/azure/container-apps/scale-app#http
+      //         https://learn.microsoft.com/azure/container-apps/scale-app#scale-behavior
       //         https://learn.microsoft.com/azure/container-apps/billing#no-replicas-are-running
       scale: {
         minReplicas: 0
         maxReplicas: 1
         rules: [
           {
-            name: 'jour'
-            custom: {
-              type: 'cron'
+            name: 'visites'
+            http: {
               metadata: {
-                timezone: 'Australia/Sydney'
-                start: '30 6 * * *'
-                end: '30 22 * * *'
-                desiredReplicas: '1'
+                concurrentRequests: '10'
               }
             }
           }

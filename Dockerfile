@@ -19,6 +19,8 @@ ARG VERSION=dev
 ENV NODE_ENV=production PORT=8080 STATIC_DIR=/app/web APP_VERSION=${VERSION}
 WORKDIR /app
 COPY --from=build /src/apps/hub/dist/index.mjs ./index.mjs
+# Relevé horaire du Track record, lancé par la tâche planifiée (infra/job.bicep).
+COPY --from=build /src/apps/hub/dist/job.mjs ./job.mjs
 COPY --from=build /src/apps/web/dist ./web
 USER node
 EXPOSE 8080

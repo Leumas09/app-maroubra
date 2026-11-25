@@ -801,3 +801,36 @@ Requête Cost Management du 25/11/2026, jours complets de fonctionnement (20 au 
 - Constaté le 25/11/2026 à 23 h : l'app était bien éteinte, mais une visite la réveille (première requête sans réponse pendant environ 20 s, puis l'app répond, sans appeler le modèle) ; elle se rendort ensuite.
 - Acceptés : le Track record n'a plus de relevés horaires la nuit ; les notifications de nuit (aurores, passages de satellites) ne partent plus ; démarrage à froid à 6 h 30, les sources se remplissent dans les minutes qui suivent.
 - La qualité du tri des actualités par gpt-6-luna reste à comparer à son juge (précision visée d'au moins 90 %, partie B.4).
+
+## Partie W : l'app dort quand personne ne la regarde (26 novembre 2026)
+
+Constat du 25/11 à 23 h : une visite réveille l'app éteinte en une vingtaine de secondes. Samuel est le seul utilisateur : il choisit de la laisser dormir dès qu'elle n'est pas regardée, en gardant le Track record (option B).
+
+### W.1 Ce qui change
+
+| Avant (partie V) | Maintenant |
+|---|---|
+| Une réplique de 6 h 30 à 22 h 30 (règle cron) | Zéro réplique au repos, réveil à la première requête (règle HTTP `visites`), retour à zéro 300 s après la dernière requête |
+| Archive horaire écrite par l'app | Écrite par la tâche planifiée `maroubra-releve` (`infra/job.bicep`, `apps/hub/src/job.ts`), chaque heure à la 5e minute UTC ; l'app l'écrit aussi quand elle est éveillée (écritures idempotentes) |
+| Vérification du déploiement sautée la nuit | Toujours faite : la requête du workflow réveille l'app |
+
+La règle de nuit sur le modèle (partie V) reste : aucun appel entre 22 h 30 et 6 h 30, même si on ouvre l'app.
+
+### W.2 Vérifié
+
+- Tâche en direct depuis la session de développement, archive en mémoire : 3 s, 112 lignes (prévisions Open-Meteo et YSSY, observations YSSY et bouée, score du lever). `marine` et `fc-buoy` ont échoué faute d'accès réseau dans cette session ; elles fonctionnent en production.
+- Sans table d'archive, `job.mjs` sort avec le code 1 : une exécution ratée apparaît en échec dans Azure.
+- Tests : `apps/hub/test/job.test.ts`.
+- `az containerapp update --scale-rule-name` remplace toutes les règles existantes (Azure CLI 2.93.0, `containerapp_decorator.py`, `set_up_scale_rule`) : la règle cron `jour` disparaît.
+
+### W.3 Ce qu'on perd, accepté par Samuel
+
+- **Notifications** : aucune quand l'app dort (aurores, passages de l'ISS, plage).
+- **Survols annoncés et jugés** (Track record « Overhead ») : ils demandent un suivi continu des avions, donc seulement pendant que l'app est éveillée. L'échantillon sera petit ; le score reste affiché tel quel.
+- **Ciel satellite au lever** (`sunsat`) : archivé seulement si l'app est éveillée au lever.
+- **Au réveil** : une vingtaine de secondes d'attente, puis quelques minutes pour l'historique de la bouée et les traces d'avions.
+
+### W.4 À vérifier en production
+
+- Le flux temps réel (SSE) garde-t-il l'app éveillée tant qu'une page est ouverte ? Sinon, l'écran se fige 5 min après la dernière requête et une reconnexion la réveille.
+- Coût réel après une semaine (requête Cost Management de la partie V).

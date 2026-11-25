@@ -139,6 +139,23 @@ az containerapp update -n maroubra -g rg-app-maroubra --cpu 0.25 --memory 0.5Gi 
 az cognitiveservices account deployment delete -g rg-app-maroubra -n $acct --deployment-name gpt-6.1-sol
 ```
 
+Le 26/11/2026 (partie W du plan) : tâche de relevé horaire et app à la demande. La tâche se déploie seule avec `infra/job.bicep` (aucun secret), l'image doit être une image construite depuis la version 1.4.0 (qui contient `job.mjs`) :
+
+```powershell
+$img = az containerapp show -n maroubra -g rg-app-maroubra --query "properties.template.containers[0].image" -o tsv
+$p = @{ '$schema' = 'https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#'; contentVersion = '1.0.0.0'; parameters = @{
+  name = @{ value = 'maroubra' }; location = @{ value = 'australiaeast' }; tags = @{ value = @{ project = 'maroubra' } }
+  containerImage = @{ value = $img }; registryServer = @{ value = 'crkiwiapps.azurecr.io' }
+  environmentId = @{ value = (az containerapp env show -n cae-kiwi-apps -g rg-kiwi-apps --query id -o tsv) }
+  runIdentityName = @{ value = 'id-maroubra-run' }; ciIdentityName = @{ value = 'id-maroubra-ci' }
+  storageName = @{ value = (az storage account list -g rg-app-maroubra --query "[0].name" -o tsv) } } }
+$p | ConvertTo-Json -Depth 5 | Set-Content "$env:TEMP\job.parameters.json"
+Invoke-WebRequest https://raw.githubusercontent.com/Leumas09/app-maroubra/main/infra/job.bicep -OutFile "$env:TEMP\job.bicep"
+az deployment group create -g rg-app-maroubra -n job-maroubra --template-file "$env:TEMP\job.bicep" --parameters "@$env:TEMP\job.parameters.json" --query properties.provisioningState -o tsv
+az containerapp update -n maroubra -g rg-app-maroubra --min-replicas 0 --max-replicas 1 --scale-rule-name visites --scale-rule-type http --scale-rule-http-concurrency 10 --query "properties.template.scale" -o json
+az containerapp job start -n maroubra-releve -g rg-app-maroubra --query name -o tsv
+```
+
 Le Bicep reste la référence : il décrit déjà cet état, un redéploiement complet ne change donc rien.
 
 ## Plus tard
