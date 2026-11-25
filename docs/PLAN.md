@@ -798,5 +798,6 @@ Requête Cost Management du 25/11/2026, jours complets de fonctionnement (20 au 
 ### V.3 Application, et ce qu'on accepte
 
 - Samuel a renoncé au what-if pour ce changement (« pas de what-if, c'est une application pour moi »). Pour ne pas repasser les secrets, l'infra est appliquée par deux commandes `az` ciblées qui reproduisent exactement le Bicep : `docs/DEPLOY.md`, section « Changements ciblés ».
-- Acceptés : une visite la nuit ne réveille pas l'app (pas de règle HTTP) ; le Track record n'a plus de relevés horaires la nuit ; les notifications de nuit (aurores, passages de satellites) ne partent plus ; démarrage à froid à 6 h 30, les sources se remplissent dans les minutes qui suivent.
+- Constaté le 25/11/2026 à 23 h : l'app était bien éteinte, mais une visite la réveille (première requête sans réponse pendant environ 20 s, puis l'app répond, sans appeler le modèle) ; elle se rendort ensuite.
+- Acceptés : le Track record n'a plus de relevés horaires la nuit ; les notifications de nuit (aurores, passages de satellites) ne partent plus ; démarrage à froid à 6 h 30, les sources se remplissent dans les minutes qui suivent.
 - La qualité du tri des actualités par gpt-6-luna reste à comparer à son juge (précision visée d'au moins 90 %, partie B.4).

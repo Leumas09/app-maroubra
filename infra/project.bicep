@@ -113,7 +113,8 @@ resource app 'Microsoft.App/containerApps@2026-07-01' = {
       ]
       // Éteinte la nuit, de 22 h 30 à 6 h 30 à Sydney (demande de Samuel du 25/11/2026, coût) : une réplique
       // de jour par la règle cron de KEDA, zéro sinon (arrêt effectif après les 300 s de refroidissement).
-      // Sans règle HTTP, une visite la nuit ne réveille pas l'app. Garder en accord avec apps/hub/src/night.ts.
+      // Constaté le 25/11/2026 à 23 h : une visite la nuit réveille quand même l'app (démarrage à froid d'une
+      // vingtaine de secondes), qui se rendort ensuite. Garder en accord avec apps/hub/src/night.ts.
       // Learn : https://learn.microsoft.com/azure/container-apps/scale-app#custom
       //         https://learn.microsoft.com/azure/container-apps/billing#no-replicas-are-running
       scale: {
